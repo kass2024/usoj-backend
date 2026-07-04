@@ -82,7 +82,7 @@ class StudentCreateController extends Controller
                 $q->where('degree_level_id', $degreeLevelId);
             }
 
-            $rows = $q->get(['id','reg_number','fname','lname','email','phone','status','degree_level_id'])
+            $rows = $q->get(['id','reg_number','fname','lname','email','phone','status','degree_level_id','profile_img'])
                 ->map(function ($s) {
                     return [
                         'id'         => $s->id,
@@ -92,6 +92,9 @@ class StudentCreateController extends Controller
                         'phone'      => $s->phone,
                         'status'     => $s->status,
                         'level'      => optional($s->degreeLevel)->name,
+                        'profile_img_url' => $s->profile_img
+                            ? asset('storage/' . ltrim($s->profile_img, '/'))
+                            : asset('images/profile.jpg'),
                     ];
                 });
 

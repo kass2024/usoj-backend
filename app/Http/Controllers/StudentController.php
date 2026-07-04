@@ -45,6 +45,7 @@ class StudentController extends Controller
         'date_created' => 'required|date',
         'department_id' => 'required',
         'degree_level_id' => 'required',
+        'profile_img' => 'nullable|image|mimes:jpg,jpeg,png|max:4096',
     ]);
 
     // ✅ Get the selected department
@@ -69,7 +70,11 @@ class StudentController extends Controller
     $studentData = $request->merge([
         'password' => $hashedPassword,
         'reg_number' => $regNumber
-    ])->except(['_token']);
+    ])->except(['_token', 'profile_img']);
+
+    if ($request->hasFile('profile_img')) {
+        $studentData['profile_img'] = $request->file('profile_img')->store('profile_images', 'public');
+    }
 
     try {
         // ✅ Create student
@@ -124,10 +129,20 @@ class StudentController extends Controller
             'email' => 'required|email|unique:students,email,' . $student->id,
             'phone' => 'required|unique:students,phone,' . $student->id,
             'status' => 'required',
+            'profile_img' => 'nullable|image|mimes:jpg,jpeg,png|max:4096',
         ]);
 
         try {
-            $student->update($request->all());
+            $data = $request->except(['profile_img', '_token', '_method']);
+
+            if ($request->hasFile('profile_img')) {
+                if ($student->profile_img && Storage::disk('public')->exists($student->profile_img)) {
+                    Storage::disk('public')->delete($student->profile_img);
+                }
+                $data['profile_img'] = $request->file('profile_img')->store('profile_images', 'public');
+            }
+
+            $student->update($data);
             return back()->with('message', 'Student update Succesfully');
         } catch (\Throwable $th) {
             return back()->with('error', $th->getMessage());

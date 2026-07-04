@@ -97,7 +97,7 @@
               <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" id="close-modal"></button>
             </div>
 
-            <form class="tablelist-form modal-form" method="POST" autocomplete="off">
+            <form class="tablelist-form modal-form" method="POST" autocomplete="off" enctype="multipart/form-data">
               @csrf
               <div class="modal-body">
                 <input type="hidden" value="{{ old('id') }}" name="id" id="id" />
@@ -143,6 +143,24 @@
                     <option {{ old('status') == 'inactive' ? 'selected' : '' }} value="inactive">Inactive</option>
                   </select>
                   @error('status') <span class="text-danger">{{ $message }}</span> @enderror
+                </div>
+
+                <div class="mb-3">
+                  <label for="profile_img" class="form-label">Student Photo</label>
+                  <div class="text-center mb-2">
+                    <img id="profile-img-preview"
+                         src="{{ asset('images/profile.jpg') }}"
+                         alt="Student photo preview"
+                         class="rounded border"
+                         style="width:110px;height:130px;object-fit:cover;">
+                  </div>
+                  <input type="file"
+                         name="profile_img"
+                         id="profile_img"
+                         class="form-control"
+                         accept="image/jpeg,image/png,image/jpg">
+                  <div class="form-text">Optional. Used on transcript and degree certificates.</div>
+                  @error('profile_img') <span class="text-danger">{{ $message }}</span> @enderror
                 </div>
 
                 <div class="small text-muted">
@@ -253,6 +271,7 @@
                      data-status="${c.status || ''}"
                      data-email="${esc(c.email || '')}"
                      data-phone="${esc(c.phone || '')}"
+                     data-profile-img="${esc(c.profile_img_url || '{{ asset('images/profile.jpg') }}')}"
                      data-action="${routes.studentUpdate(c.id)}">
                     <i class="ri-pencil-fill fs-16"></i>
                   </a>
@@ -446,6 +465,20 @@
   <!-- ---------- MODALS (create/edit/delete) using your preferred handlers ---------- -->
   <script>
     $(document).ready(function() {
+      const defaultPhoto = "{{ asset('images/profile.jpg') }}";
+
+      function setPhotoPreview(url) {
+        $('#profile-img-preview').attr('src', url || defaultPhoto);
+      }
+
+      $('#profile_img').on('change', function () {
+        const file = this.files && this.files[0];
+        if (!file) {
+          return;
+        }
+        setPhotoPreview(URL.createObjectURL(file));
+      });
+
       // CREATE
       $(document).on('click', '#create-btn', function() {
         document.getElementById("exampleModalLabel").innerHTML = "Add Student";
@@ -464,6 +497,8 @@
         $('#email').val('');
         $('#phone').val('');
         $('#status-field').val('active');
+        $('#profile_img').val('');
+        setPhotoPreview(defaultPhoto);
 
         // modal scope + hidden fields
         $('#modalDeptName').text($('#departmentSelect option:selected').text() || '');
@@ -489,6 +524,8 @@
         $('#email').val($(this).data('email'));
         $('#phone').val($(this).data('phone'));
         $('#status-field').val($(this).data('status'));
+        $('#profile_img').val('');
+        setPhotoPreview($(this).data('profile-img'));
 
         $('#modalDeptName').text($('#departmentSelect option:selected').text() || '');
         $('#modalLevelName').text($('#levelSelect option:selected').text() || '');

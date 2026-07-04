@@ -14,26 +14,40 @@ class CertificatesController extends Controller
 {
     public function index(Request $request)
     {
-        return view('certificates.index');
+        $student = null;
+
+        if ($studentId = session('certificate_student_id')) {
+            $student = Student::with('department')->find($studentId);
+        }
+
+        return view('certificates.index', compact('student'));
     }
 
     public function verifyRegNumber(Request $request)
     {
         if (!$request->filled('regNumber')) {
-            return redirect()->back()->with('error', 'Registration number is required');
+            return redirect()
+                ->route('certificates.index')
+                ->with('error', 'Registration number is required');
         }
 
+        $regNumber = trim($request->input('regNumber'));
+
         $student = Student::with('department')
-            ->where('reg_number', $request->input('regNumber'))
+            ->whereRaw('UPPER(reg_number) = ?', [strtoupper($regNumber)])
             ->first();
 
         if (!$student) {
-            return redirect()->back()->with('error', 'Student not found');
+            return redirect()
+                ->route('certificates.index')
+                ->with('error', 'Student not found for registration number: ' . $regNumber)
+                ->withInput();
         }
 
-        return view('certificates.review', [
-            'student' => $student,
-        ]);
+        return redirect()
+            ->route('certificates.index')
+            ->with('certificate_student_id', $student->id)
+            ->withInput();
     }
 
     public function generateTranscript(Request $request, $studentId)
@@ -70,7 +84,8 @@ class CertificatesController extends Controller
         $student->update(['profile_img' => $path]);
 
         return redirect()
-            ->back()
+            ->route('certificates.index')
+            ->with('certificate_student_id', $student->id)
             ->with('success', 'Student photo updated successfully.');
     }
 
