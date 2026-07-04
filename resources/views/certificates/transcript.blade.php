@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <title>USJ Academic Transcript</title>
     <style>
-        @page { size: A4 portrait; margin: 8mm 10mm; }
+        @page { size: A4 portrait; margin: 6mm 8mm; }
 
         * { box-sizing: border-box; }
 
@@ -15,12 +15,14 @@
             color: #000;
         }
 
-        table { border-collapse: collapse; }
+        table { border-collapse: collapse; table-layout: fixed; }
 
         .sheet {
             width: 100%;
+            max-width: 100%;
             border: 3px double #E89828;
-            padding: 4mm;
+            padding: 3mm;
+            overflow: hidden;
         }
 
         .header { text-align: center; margin-bottom: 2mm; }
@@ -88,23 +90,43 @@
 
         .summary {
             margin-top: 2mm;
-            font-size: 8.5px;
+            font-size: 8px;
             font-weight: bold;
             text-transform: uppercase;
-            line-height: 1.45;
+            line-height: 1.4;
+            word-wrap: break-word;
         }
 
-        .auth { width: 100%; margin-top: 2mm; }
+        .auth { width: 100%; margin-top: 2mm; table-layout: fixed; }
         .auth td { vertical-align: bottom; }
-        .auth .stamp img { width: 38mm; height: auto; }
-        .auth .sign { text-align: right; font-size: 8px; line-height: 1.4; }
+        .auth .stamp-cell { width: 40%; text-align: left; }
+        .auth .sign-cell { width: 60%; text-align: right; font-size: 8px; line-height: 1.4; padding-left: 2mm; }
+
+        .registrar-stack {
+            width: 36mm;
+            text-align: center;
+        }
+
+        .registrar-stack img.stamp {
+            width: 24mm;
+            height: 24mm;
+            display: block;
+        }
+
+        .registrar-stack img.sig {
+            width: 28mm;
+            max-height: 8mm;
+            display: block;
+            margin: -3mm auto 0 auto;
+        }
 
         .note-box {
             background: #E89828;
             margin-top: 2mm;
             padding: 2mm;
-            font-size: 7px;
-            line-height: 1.4;
+            font-size: 6.5px;
+            line-height: 1.35;
+            word-wrap: break-word;
         }
         .note-box b { color: #fff; }
 
@@ -221,12 +243,19 @@
 
     <table class="auth">
         <tr>
-            <td style="width:42%;" class="stamp">
-                @if ($registrar_stamp_data_uri)
-                    <img src="{{ $registrar_stamp_data_uri }}" alt="Registrar Stamp">
-                @endif
+            <td class="stamp-cell">
+                <div class="registrar-stack">
+                    @if ($registrar_stamp_only_data_uri)
+                        <img class="stamp" src="{{ $registrar_stamp_only_data_uri }}" alt="Registrar Stamp">
+                    @elseif ($registrar_stamp_data_uri)
+                        <img class="stamp" src="{{ $registrar_stamp_data_uri }}" alt="Registrar Stamp">
+                    @endif
+                    @if ($registrar_signature_only_data_uri)
+                        <img class="sig" src="{{ $registrar_signature_only_data_uri }}" alt="Registrar Signature">
+                    @endif
+                </div>
             </td>
-            <td style="width:58%;" class="sign">
+            <td class="sign-cell">
                 Signed: Academic Registrar<br>
                 Date &amp; Stamp: {{ now()->format('d/m/Y') }}
             </td>

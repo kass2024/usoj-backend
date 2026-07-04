@@ -60,7 +60,8 @@ class CertificatesController extends Controller
             ->setOptions([
                 'isRemoteEnabled' => true,
                 'isHtml5ParserEnabled' => true,
-                'dpi' => 120,
+                'dpi' => 150,
+                'defaultFont' => 'Times-Roman',
             ]);
 
         return $pdf->stream($student->reg_number . '_transcript.pdf');
@@ -101,7 +102,8 @@ class CertificatesController extends Controller
             ->setOptions([
                 'isRemoteEnabled' => true,
                 'isHtml5ParserEnabled' => true,
-                'dpi' => 120,
+                'dpi' => 150,
+                'defaultFont' => 'Times-Roman',
             ]);
 
         return $pdf->stream($student->reg_number . '_degree.pdf');
@@ -134,6 +136,8 @@ class CertificatesController extends Controller
             'student_name'     => CertificatePresenter::studentDisplayName($student),
             'registrar_stamp'  => CertificatePresenter::registrarStampPath(),
             'registrar_stamp_data_uri' => CertificatePresenter::registrarStampDataUri(),
+            'registrar_stamp_only_data_uri' => CertificatePresenter::registrarStampOnlyDataUri(),
+            'registrar_signature_only_data_uri' => CertificatePresenter::registrarSignatureOnlyDataUri(),
             'vc_signature'     => CertificatePresenter::vcSignaturePath(),
             'vc_signature_data_uri'    => CertificatePresenter::vcSignatureDataUri(),
         ];

@@ -77,24 +77,34 @@ if (!$size) {
 $w = $size['width'];
 $h = $size['height'];
 
-// Vice Chancellor signature — bottom-left
+// Vice Chancellor signature — bottom-left (no title text)
 cropPng(
     $full,
     "$dir/vc-signature.png",
-    (int) ($w * 0.08),
-    (int) ($h * 0.805),
-    (int) ($w * 0.34),
-    (int) ($h * 0.085)
+    (int) ($w * 0.10),
+    (int) ($h * 0.808),
+    (int) ($w * 0.30),
+    (int) ($w * 0.045)
 );
 
-// Registrar stamp + signature block — bottom-right (from reference degree)
+// Registrar circular stamp ONLY — circle without title text below
 cropPng(
     $full,
-    "$dir/degree-registrar-stamp.png",
-    (int) ($w * 0.50),
-    (int) ($h * 0.765),
-    (int) ($w * 0.42),
-    (int) ($h * 0.155)
+    "$dir/registrar-stamp-only.png",
+    (int) ($w * 0.565),
+    (int) ($h * 0.795),
+    (int) ($w * 0.175),
+    (int) ($w * 0.175)
+);
+
+// Registrar blue signature ONLY — separate from stamp
+cropPng(
+    $full,
+    "$dir/registrar-signature-only.png",
+    (int) ($w * 0.58),
+    (int) ($h * 0.818),
+    (int) ($w * 0.28),
+    (int) ($w * 0.045)
 );
 
 echo "Extracted degree assets at {$w}x{$h}\n";

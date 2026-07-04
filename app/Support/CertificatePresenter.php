@@ -79,10 +79,31 @@ class CertificatePresenter
 
     public static function registrarStampDataUri(): ?string
     {
+        return self::registrarStampOnlyDataUri()
+            ?? self::imageDataUri(public_path('images/usoj/degree-registrar-stamp-clean.png'))
+            ?? self::imageDataUri(public_path('images/usoj/degree-registrar-stamp.png'));
+    }
+
+    public static function registrarStampOnlyDataUri(): ?string
+    {
         foreach ([
-            public_path('images/usoj/degree-registrar-stamp-clean.png'),
-            public_path('images/usoj/degree-registrar-stamp.png'),
-            public_path('images/usoj/registrar-stamp-clean.png'),
+            public_path('images/usoj/registrar-stamp-only-clean.png'),
+            public_path('images/usoj/registrar-stamp-only.png'),
+        ] as $path) {
+            $uri = self::imageDataUri($path);
+            if ($uri) {
+                return $uri;
+            }
+        }
+
+        return null;
+    }
+
+    public static function registrarSignatureOnlyDataUri(): ?string
+    {
+        foreach ([
+            public_path('images/usoj/registrar-signature-only-clean.png'),
+            public_path('images/usoj/registrar-signature-only.png'),
         ] as $path) {
             $uri = self::imageDataUri($path);
             if ($uri) {

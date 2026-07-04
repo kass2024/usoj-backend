@@ -74,10 +74,40 @@ function cleanSignatureImage(string $src, string $dest): bool
     return true;
 }
 
+function sharpenImage(string $path, float $amount = 1.2): bool
+{
+    if (!is_file($path) || !function_exists('imageconvolution')) {
+        return false;
+    }
+
+    $img = @imagecreatefrompng($path);
+    if (!$img) {
+        return false;
+    }
+
+    $matrix = [
+        [-1, -1, -1],
+        [-1, 16 + $amount, -1],
+        [-1, -1, -1],
+    ];
+    $divisor = 8 + $amount;
+    $offset = 0;
+
+    imageconvolution($img, $matrix, $divisor, $offset);
+    imagealphablending($img, false);
+    imagesavealpha($img, true);
+    imagepng($img, $path);
+    imagedestroy($img);
+
+    return true;
+}
+
 $dir = __DIR__ . '/../public/images/usoj';
 
 $pairs = [
     'vc-signature.png' => 'vc-signature-clean.png',
+    'registrar-stamp-only.png' => 'registrar-stamp-only-clean.png',
+    'registrar-signature-only.png' => 'registrar-signature-only-clean.png',
     'degree-registrar-stamp.png' => 'degree-registrar-stamp-clean.png',
     'registrar-stamp.png' => 'registrar-stamp-clean.png',
 ];
@@ -86,6 +116,9 @@ foreach ($pairs as $srcName => $destName) {
     $src = "$dir/$srcName";
     $dest = "$dir/$destName";
     if (cleanSignatureImage($src, $dest)) {
+        if (str_contains($destName, 'stamp')) {
+            sharpenImage($dest, 1.5);
+        }
         echo "Cleaned: $destName\n";
     }
 }

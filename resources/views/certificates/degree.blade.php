@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <title>USJ Degree Certificate</title>
     <style>
-        @page { size: A4 portrait; margin: 0; }
+        @page { size: A4 portrait; margin: 5mm; }
 
         * { box-sizing: border-box; }
 
@@ -15,19 +15,18 @@
         }
 
         .page {
-            width: 210mm;
-            height: 297mm;
+            width: 100%;
+            max-width: 200mm;
+            margin: 0 auto;
             background: #FFFFFF;
-            padding: 8mm;
             font-family: "Times New Roman", Times, serif;
             color: #000;
         }
 
         .frame {
             width: 100%;
-            height: 100%;
             border: 2px solid #000;
-            padding: 10mm 12mm 12mm 12mm;
+            padding: 8mm 6mm 10mm 6mm;
         }
 
         .header {
@@ -35,106 +34,135 @@
             font-family: Arial, Helvetica, sans-serif;
             font-weight: bold;
             text-transform: uppercase;
-            letter-spacing: 0.6px;
+            letter-spacing: 0.5px;
         }
 
-        .header .line1 { font-size: 16pt; margin: 0; }
-        .header .line2 { font-size: 14pt; margin: 1mm 0 0 0; }
+        .header .line1 { font-size: 15pt; margin: 0; }
+        .header .line2 { font-size: 13pt; margin: 1mm 0 0 0; }
 
         .crest {
             display: block;
-            margin: 4mm auto 0 auto;
-            width: 22mm;
+            margin: 3mm auto 0 auto;
+            width: 20mm;
             height: auto;
         }
 
         .content-wrap {
             width: 100%;
-            margin-top: 6mm;
+            margin-top: 5mm;
         }
 
         .main {
             width: 100%;
             border-collapse: collapse;
+            table-layout: fixed;
         }
 
-        .main td { vertical-align: top; }
+        .main td { vertical-align: top; word-wrap: break-word; }
 
         .photo-cell {
-            width: 24%;
+            width: 22%;
             text-align: center;
-            padding-top: 6mm;
+            padding-top: 5mm;
         }
 
         .photo-cell img {
-            width: 26mm;
-            height: 32mm;
+            width: 24mm;
+            height: 30mm;
             object-fit: cover;
             border: 1px solid #666;
-            background: #fff;
         }
 
-        .body-cell { text-align: center; padding-top: 2mm; }
-        .body-cell.with-photo { width: 76%; padding-left: 4mm; }
-        .body-cell.no-photo { width: 100%; padding: 2mm 8mm 0 8mm; }
+        .body-cell { text-align: center; padding: 0 2mm; }
+        .body-cell.with-photo { width: 78%; }
+        .body-cell.no-photo { width: 100%; padding: 0 4mm; }
 
-        .lead { font-size: 12pt; margin: 0 0 4mm 0; }
+        .lead { font-size: 11.5pt; margin: 0 0 3mm 0; }
         .student-name {
-            font-size: 20pt;
+            font-size: 18pt;
             font-style: italic;
             font-weight: bold;
-            margin: 0 0 5mm 0;
-            line-height: 1.2;
+            margin: 0 0 4mm 0;
+            line-height: 1.15;
         }
-        .bridge { font-size: 11.5pt; margin: 0 0 2mm 0; line-height: 1.35; }
+        .bridge { font-size: 11pt; margin: 0 0 2mm 0; line-height: 1.3; }
         .degree-name {
-            font-size: 14pt;
+            font-size: 12pt;
             font-style: italic;
             font-weight: bold;
-            margin: 4mm 0;
-            line-height: 1.35;
+            margin: 3mm 0;
+            line-height: 1.25;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
         }
-        .class-line { font-size: 11.5pt; font-style: italic; margin: 3mm 0; }
-        .institution { font-size: 11.5pt; margin: 3mm 0 4mm 0; }
-        .date-line { font-size: 11.5pt; font-weight: bold; margin-top: 2mm; }
+        .class-line { font-size: 11pt; font-style: italic; margin: 2mm 0; }
+        .institution { font-size: 11pt; margin: 2mm 0 3mm 0; }
+        .date-line { font-size: 11pt; font-weight: bold; margin-top: 2mm; }
 
         .signatures {
             width: 100%;
-            margin-top: 16mm;
+            margin-top: 14mm;
             border-collapse: collapse;
+            table-layout: fixed;
         }
 
         .signatures td {
             width: 50%;
             text-align: center;
+            vertical-align: top;
+            padding: 0 3mm;
+        }
+
+        .sign-box { width: 100%; }
+
+        .sign-graphic {
+            height: 28mm;
+            text-align: center;
             vertical-align: bottom;
-            padding: 0 8mm;
         }
 
-        .signatures img.vc {
-            width: 44mm;
-            height: auto;
+        .sign-graphic img.vc {
+            width: 38mm;
+            max-height: 14mm;
             display: block;
-            margin: 0 auto 1mm auto;
+            margin: 0 auto;
         }
 
-        .signatures img.registrar {
+        .registrar-stack {
             width: 42mm;
-            height: auto;
+            margin: 0 auto;
+            text-align: center;
+        }
+
+        .registrar-stack img.stamp {
+            width: 28mm;
+            height: 28mm;
             display: block;
-            margin: 0 auto 1mm auto;
+            margin: 0 auto;
+        }
+
+        .registrar-stack img.sig {
+            width: 32mm;
+            max-height: 10mm;
+            display: block;
+            margin: -2mm auto 0 auto;
+        }
+
+        .sign-line {
+            border-top: 1px solid #000;
+            width: 42mm;
+            margin: 2mm auto 0 auto;
+            height: 0;
         }
 
         .sign-title {
             font-family: Arial, Helvetica, sans-serif;
-            font-size: 8pt;
+            font-size: 7.5pt;
             font-weight: bold;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.4px;
             text-transform: uppercase;
-            border-top: 1px solid #000;
-            display: inline-block;
-            min-width: 50mm;
-            padding-top: 2mm;
+            margin-top: 2mm;
+            line-height: 1.2;
         }
     </style>
 </head>
@@ -189,16 +217,43 @@
         <table class="signatures">
             <tr>
                 <td>
-                    @if ($vc_signature_data_uri)
-                        <img class="vc" src="{{ $vc_signature_data_uri }}" alt="Vice Chancellor Signature">
-                    @endif
-                    <div class="sign-title">Vice Chancellor</div>
+                    <table class="sign-box">
+                        <tr>
+                            <td class="sign-graphic">
+                                @if ($vc_signature_data_uri)
+                                    <img class="vc" src="{{ $vc_signature_data_uri }}" alt="Vice Chancellor Signature">
+                                @endif
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>
+                                <div class="sign-line"></div>
+                                <div class="sign-title">Vice Chancellor</div>
+                            </td>
+                        </tr>
+                    </table>
                 </td>
                 <td>
-                    @if ($registrar_stamp_data_uri)
-                        <img class="registrar" src="{{ $registrar_stamp_data_uri }}" alt="Registrar Stamp and Signature">
-                    @endif
-                    <div class="sign-title">Academic Registrar</div>
+                    <table class="sign-box">
+                        <tr>
+                            <td class="sign-graphic">
+                                <div class="registrar-stack">
+                                    @if ($registrar_stamp_only_data_uri)
+                                        <img class="stamp" src="{{ $registrar_stamp_only_data_uri }}" alt="Registrar Stamp">
+                                    @endif
+                                    @if ($registrar_signature_only_data_uri)
+                                        <img class="sig" src="{{ $registrar_signature_only_data_uri }}" alt="Registrar Signature">
+                                    @endif
+                                </div>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td>
+                                <div class="sign-line"></div>
+                                <div class="sign-title">Academic Registrar</div>
+                            </td>
+                        </tr>
+                    </table>
                 </td>
             </tr>
         </table>
