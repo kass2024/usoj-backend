@@ -94,7 +94,9 @@ class CertificatesController extends Controller
         $studentId = decrypt($studentId);
         $student = Student::with(['department.school', 'degree_level'])->findOrFail($studentId);
 
-        $pdf = Pdf::loadView('certificates.degree', $this->buildCertificateData($student))
+        $showPhoto = $request->query('photo', '1') !== '0';
+
+        $pdf = Pdf::loadView('certificates.degree', $this->buildCertificateData($student, $showPhoto))
             ->setPaper('a4', 'portrait')
             ->setOptions([
                 'isRemoteEnabled' => true,
@@ -105,7 +107,7 @@ class CertificatesController extends Controller
         return $pdf->stream($student->reg_number . '_degree.pdf');
     }
 
-    private function buildCertificateData(Student $student): array
+    private function buildCertificateData(Student $student, bool $showPhoto = true): array
     {
         $grouped = $this->getStudentCoursesFromSubmissions($student);
         $semesters = CertificateGrades::buildSemesters($grouped);
@@ -122,7 +124,8 @@ class CertificatesController extends Controller
             'faculty'          => CertificatePresenter::facultyName($student),
             'program'          => CertificatePresenter::programName($student),
             'photo_path'       => CertificatePresenter::photoPath($student),
-            'photo_data_uri'   => CertificatePresenter::photoDataUri($student),
+            'photo_data_uri'   => $showPhoto ? CertificatePresenter::photoDataUri($student) : null,
+            'show_photo'       => $showPhoto,
             'crest_data_uri'   => CertificatePresenter::crestDataUri(),
             'serial_number'    => CertificatePresenter::serialNumber($student),
             'completion_year'  => CertificatePresenter::completionYear(),

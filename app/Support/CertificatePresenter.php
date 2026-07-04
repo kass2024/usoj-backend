@@ -80,8 +80,9 @@ class CertificatePresenter
     public static function registrarStampDataUri(): ?string
     {
         foreach ([
+            public_path('images/usoj/degree-registrar-stamp-clean.png'),
             public_path('images/usoj/degree-registrar-stamp.png'),
-            public_path('images/usoj/registrar-stamp.png'),
+            public_path('images/usoj/registrar-stamp-clean.png'),
         ] as $path) {
             $uri = self::imageDataUri($path);
             if ($uri) {
@@ -95,6 +96,7 @@ class CertificatePresenter
     public static function vcSignatureDataUri(): ?string
     {
         foreach ([
+            public_path('images/usoj/vc-signature-clean.png'),
             public_path('images/usoj/vc-signature.png'),
         ] as $path) {
             $uri = self::imageDataUri($path);
@@ -108,7 +110,7 @@ class CertificatePresenter
 
     public static function degreeBackgroundColor(): string
     {
-        return '#FDF5E6';
+        return '#FFFFFF';
     }
 
     public static function photoUrl(Student $student): string

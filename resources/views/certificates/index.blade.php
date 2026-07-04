@@ -87,15 +87,50 @@
                     </div>
                 </div>
 
-                <div class="d-flex gap-3 flex-wrap">
+                <div class="d-flex gap-3 flex-wrap align-items-center">
                     <a target="_blank" href="{{ route('certificates.transcript', encrypt($student->id)) }}">
                         <button type="button" class="btn btn-primary">Generate Transcript</button>
                     </a>
-                    <a target="_blank" href="{{ route('certificates.degree', encrypt($student->id)) }}">
-                        <button type="button" class="btn btn-success">Generate Degree</button>
-                    </a>
+
+                    <div class="d-flex flex-wrap gap-2 align-items-center">
+                        <a target="_blank"
+                           href="{{ route('certificates.degree', ['id' => encrypt($student->id), 'photo' => 1]) }}"
+                           id="degree-link-with-photo">
+                            <button type="button" class="btn btn-success">Generate Degree</button>
+                        </a>
+                        <a target="_blank"
+                           href="{{ route('certificates.degree', ['id' => encrypt($student->id), 'photo' => 0]) }}"
+                           id="degree-link-no-photo"
+                           class="d-none">
+                            <button type="button" class="btn btn-success">Generate Degree</button>
+                        </a>
+                        <label class="form-check-label ms-1">
+                            <input type="checkbox"
+                                   class="form-check-input"
+                                   id="include-degree-photo"
+                                   checked>
+                            Include student photo on degree
+                        </label>
+                    </div>
                 </div>
             </div>
         </div>
+    @endisset
+
+    @isset($student)
+        <script>
+            document.getElementById('include-degree-photo')?.addEventListener('change', function () {
+                const withPhoto = document.getElementById('degree-link-with-photo');
+                const noPhoto = document.getElementById('degree-link-no-photo');
+                if (!withPhoto || !noPhoto) return;
+                if (this.checked) {
+                    withPhoto.classList.remove('d-none');
+                    noPhoto.classList.add('d-none');
+                } else {
+                    withPhoto.classList.add('d-none');
+                    noPhoto.classList.remove('d-none');
+                }
+            });
+        </script>
     @endisset
 @endsection
