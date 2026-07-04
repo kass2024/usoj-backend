@@ -88,24 +88,55 @@
             margin-bottom: 1.5mm;
         }
 
-        .summary {
+        .footer-row {
+            width: 100%;
             margin-top: 2mm;
+            table-layout: fixed;
+        }
+
+        .footer-row td { vertical-align: top; }
+
+        .summary-cell {
+            width: 52%;
             font-size: 8px;
             font-weight: bold;
             text-transform: uppercase;
-            line-height: 1.4;
+            line-height: 1.45;
             word-wrap: break-word;
+            padding-right: 2mm;
         }
 
-        .auth { width: 100%; margin-top: 2mm; table-layout: fixed; }
-        .auth td { vertical-align: bottom; }
-        .auth .stamp-cell { width: 40%; text-align: left; }
-        .auth .sign-cell { width: 60%; text-align: right; font-size: 8px; line-height: 1.4; padding-left: 2mm; }
-        .auth .stamp-cell img {
-            width: 36mm;
-            max-height: 24mm;
+        .sign-cell { width: 48%; }
+
+        .sign-area {
+            position: relative;
+            width: 100%;
+            min-height: 20mm;
+            text-align: right;
+        }
+
+        .sign-lines {
+            font-size: 8px;
+            line-height: 2.6;
+            text-align: right;
+            padding-right: 26mm;
+        }
+
+        .sign-lines .leader {
+            display: inline-block;
+            width: 32mm;
+            border-bottom: 1px dotted #000;
+            vertical-align: baseline;
+            margin-left: 1mm;
+        }
+
+        .stamp-overlay {
+            position: absolute;
+            right: 0;
+            top: -1mm;
+            width: 34mm;
+            max-height: 22mm;
             height: auto;
-            display: block;
         }
 
         .note-box {
@@ -223,22 +254,23 @@
         @endforeach
     </table>
 
-    <div class="summary">
-        FINAL CGPA: {{ number_format($final_cgpa, 2) }}<br>
-        AWARD: {{ $award }}<br>
-        CLASS: {{ $class_label }}
-    </div>
-
-    <table class="auth">
+    <table class="footer-row">
         <tr>
-            <td class="stamp-cell">
-                @if ($registrar_stamp_data_uri)
-                    <img src="{{ $registrar_stamp_data_uri }}" alt="Registrar Stamp and Signature">
-                @endif
+            <td class="summary-cell">
+                FINAL CGPA: {{ number_format($final_cgpa, 2) }}<br>
+                AWARD: {{ $award }}<br>
+                CLASS: {{ $class_label }}
             </td>
             <td class="sign-cell">
-                Signed: Academic Registrar<br>
-                Date &amp; Stamp: {{ now()->format('d/m/Y') }}
+                <div class="sign-area">
+                    <div class="sign-lines">
+                        Signed:<span class="leader"></span><br>
+                        Date &amp; Stamp:<span class="leader"></span> {{ now()->format('d/m/Y') }}
+                    </div>
+                    @if ($registrar_stamp_data_uri)
+                        <img class="stamp-overlay" src="{{ $registrar_stamp_data_uri }}" alt="Registrar Stamp and Signature">
+                    @endif
+                </div>
             </td>
         </tr>
     </table>

@@ -14,6 +14,8 @@ Route::controller(CertificatesController::class)
         Route::get('/', 'index')->name('index');
         Route::post('/', 'verifyRegNumber')->name('verify');
         Route::post('/{id}/photo', 'uploadPhoto')->name('photo');
+        Route::delete('/{id}/photo', 'deletePhoto')->name('photo.delete');
+        Route::post('/{id}/email', 'emailDocuments')->name('email');
         Route::get('/{id}/transcript', 'generateTranscript')->name('transcript');
         Route::get('/{id}/degree', 'generateDegree')->name('degree');
     });

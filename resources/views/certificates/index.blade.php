@@ -66,10 +66,22 @@
                                    class="form-control form-control-sm mb-2"
                                    accept="image/jpeg,image/png,image/jpg"
                                    required>
-                            <button type="submit" class="btn btn-sm btn-outline-primary w-100">
+                            <button type="submit" class="btn btn-sm btn-outline-primary w-100 mb-2">
                                 Save Photo
                             </button>
                         </form>
+
+                        @if ($student->profile_img)
+                            <form action="{{ route('certificates.photo.delete', encrypt($student->id)) }}"
+                                  method="post"
+                                  onsubmit="return confirm('Remove this student photo?');">
+                                @csrf
+                                @method('DELETE')
+                                <button type="submit" class="btn btn-sm btn-outline-danger w-100">
+                                    Delete Photo
+                                </button>
+                            </form>
+                        @endif
                     </div>
                     <div class="col-md-9">
                         <h5>{{ $student->fname }} {{ $student->lname }}</h5>
@@ -87,7 +99,7 @@
                     </div>
                 </div>
 
-                <div class="d-flex gap-3 flex-wrap align-items-center">
+                <div class="d-flex gap-3 flex-wrap align-items-center mb-4">
                     <a target="_blank" href="{{ route('certificates.transcript', encrypt($student->id)) }}">
                         <button type="button" class="btn btn-primary">Generate Transcript</button>
                     </a>
@@ -113,6 +125,48 @@
                         </label>
                     </div>
                 </div>
+
+                <div class="border rounded p-3 bg-light">
+                    <h6 class="mb-3">Email documents</h6>
+                    <form action="{{ route('certificates.email', encrypt($student->id)) }}" method="post">
+                        @csrf
+                        <div class="row g-3 align-items-end">
+                            <div class="col-md-4">
+                                <label class="form-label small text-muted">Recipient email</label>
+                                <input type="email"
+                                       name="email"
+                                       class="form-control"
+                                       value="{{ old('email', $student->email) }}"
+                                       placeholder="name@example.com"
+                                       required>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small text-muted">Document(s) to send</label>
+                                <select name="documents" class="form-select" id="email-documents" required>
+                                    <option value="transcript" @selected(old('documents') === 'transcript')>Transcript</option>
+                                    <option value="degree" @selected(old('documents') === 'degree')>Degree</option>
+                                    <option value="both" @selected(old('documents', 'both') === 'both')>Both</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-check-label d-block" id="email-degree-photo-wrap">
+                                    <input type="checkbox"
+                                           name="include_degree_photo"
+                                           value="1"
+                                           class="form-check-input"
+                                           id="email-include-degree-photo"
+                                           checked>
+                                    Include photo on degree
+                                </label>
+                            </div>
+                            <div class="col-md-2">
+                                <button type="submit" class="btn btn-primary w-100">
+                                    Send Email
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
             </div>
         </div>
     @endisset
@@ -131,6 +185,17 @@
                     noPhoto.classList.remove('d-none');
                 }
             });
+
+            const emailDocs = document.getElementById('email-documents');
+            const emailPhotoWrap = document.getElementById('email-degree-photo-wrap');
+
+            function toggleEmailPhotoOption() {
+                if (!emailDocs || !emailPhotoWrap) return;
+                emailPhotoWrap.style.visibility = emailDocs.value === 'transcript' ? 'hidden' : 'visible';
+            }
+
+            emailDocs?.addEventListener('change', toggleEmailPhotoOption);
+            toggleEmailPhotoOption();
         </script>
     @endisset
 @endsection

@@ -8,6 +8,7 @@ use App\Support\CertificateGrades;
 use App\Support\CertificatePresenter;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 
 class CertificatesController extends Controller
@@ -55,16 +56,83 @@ class CertificatesController extends Controller
         $studentId = decrypt($studentId);
         $student = Student::with(['department.school', 'degree_level'])->findOrFail($studentId);
 
-        $pdf = Pdf::loadView('certificates.transcript', $this->buildCertificateData($student))
-            ->setPaper('a4', 'portrait')
-            ->setOptions([
-                'isRemoteEnabled' => true,
-                'isHtml5ParserEnabled' => true,
-                'dpi' => 150,
-                'defaultFont' => 'Times-Roman',
-            ]);
+        return $this->makeTranscriptPdf($student)->stream($student->reg_number . '_transcript.pdf');
+    }
 
-        return $pdf->stream($student->reg_number . '_transcript.pdf');
+    public function deletePhoto($studentId)
+    {
+        $studentId = decrypt($studentId);
+        $student = Student::findOrFail($studentId);
+
+        if ($student->profile_img && Storage::disk('public')->exists($student->profile_img)) {
+            Storage::disk('public')->delete($student->profile_img);
+        }
+
+        $student->update(['profile_img' => null]);
+
+        return redirect()
+            ->route('certificates.index')
+            ->with('certificate_student_id', $student->id)
+            ->with('success', 'Student photo deleted successfully.');
+    }
+
+    public function emailDocuments(Request $request, $studentId)
+    {
+        $studentId = decrypt($studentId);
+
+        $request->validate([
+            'email' => 'required|email',
+            'documents' => 'required|in:transcript,degree,both',
+        ]);
+
+        $student = Student::with(['department.school', 'degree_level'])->findOrFail($studentId);
+        $recipient = $request->input('email');
+        $documents = $request->input('documents');
+        $showPhoto = $request->boolean('include_degree_photo', true);
+
+        $attachments = [];
+
+        if (in_array($documents, ['transcript', 'both'], true)) {
+            $attachments[] = [
+                'pdf' => $this->makeTranscriptPdf($student),
+                'filename' => $student->reg_number . '_transcript.pdf',
+            ];
+        }
+
+        if (in_array($documents, ['degree', 'both'], true)) {
+            $attachments[] = [
+                'pdf' => $this->makeDegreePdf($student, $showPhoto),
+                'filename' => $student->reg_number . '_degree.pdf',
+            ];
+        }
+
+        try {
+            Mail::send('emails.certificate-documents', [
+                'student' => $student,
+                'documents' => $documents,
+            ], function ($message) use ($recipient, $student, $attachments) {
+                $message->to($recipient)
+                    ->subject('University of Saint Joseph Mbarara - Academic Documents for ' . $student->reg_number);
+
+                foreach ($attachments as $attachment) {
+                    $message->attachData(
+                        $attachment['pdf']->output(),
+                        $attachment['filename'],
+                        ['mime' => 'application/pdf']
+                    );
+                }
+            });
+        } catch (\Throwable $e) {
+            return redirect()
+                ->route('certificates.index')
+                ->with('certificate_student_id', $student->id)
+                ->with('error', 'Failed to send email: ' . $e->getMessage());
+        }
+
+        return redirect()
+            ->route('certificates.index')
+            ->with('certificate_student_id', $student->id)
+            ->with('success', 'Documents sent successfully to ' . $recipient . '.');
     }
 
     public function uploadPhoto(Request $request, $studentId)
@@ -97,7 +165,12 @@ class CertificatesController extends Controller
 
         $showPhoto = $request->query('photo', '1') !== '0';
 
-        $pdf = Pdf::loadView('certificates.degree', $this->buildCertificateData($student, $showPhoto))
+        return $this->makeDegreePdf($student, $showPhoto)->stream($student->reg_number . '_degree.pdf');
+    }
+
+    private function makeTranscriptPdf(Student $student)
+    {
+        return Pdf::loadView('certificates.transcript', $this->buildCertificateData($student))
             ->setPaper('a4', 'portrait')
             ->setOptions([
                 'isRemoteEnabled' => true,
@@ -105,8 +178,18 @@ class CertificatesController extends Controller
                 'dpi' => 150,
                 'defaultFont' => 'Times-Roman',
             ]);
+    }
 
-        return $pdf->stream($student->reg_number . '_degree.pdf');
+    private function makeDegreePdf(Student $student, bool $showPhoto = true)
+    {
+        return Pdf::loadView('certificates.degree', $this->buildCertificateData($student, $showPhoto))
+            ->setPaper('a4', 'portrait')
+            ->setOptions([
+                'isRemoteEnabled' => true,
+                'isHtml5ParserEnabled' => true,
+                'dpi' => 150,
+                'defaultFont' => 'Times-Roman',
+            ]);
     }
 
     private function buildCertificateData(Student $student, bool $showPhoto = true): array
