@@ -8,171 +8,197 @@
 
         * { box-sizing: border-box; }
 
-        body {
+        html, body {
             margin: 0;
-            font-family: "Times New Roman", Times, serif;
-            color: #040611;
+            padding: 0;
+            background: #FDF5E6;
         }
 
         .page {
             width: 210mm;
             min-height: 297mm;
-            position: relative;
-            background: #F8E8C8;
-            padding: 10mm 12mm 16mm 12mm;
-        }
-
-        .border-frame {
-            border: 2px solid #D8C828;
-            min-height: 277mm;
-            padding: 8mm 10mm 12mm 10mm;
-            position: relative;
+            background: #FDF5E6;
+            padding: 14mm 16mm 18mm 16mm;
+            font-family: "Times New Roman", Times, serif;
+            color: #0E0603;
         }
 
         .header {
             text-align: center;
             font-family: Arial, Helvetica, sans-serif;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
         }
 
-        .header h1 {
-            margin: 0;
-            font-size: 18px;
-            letter-spacing: 0.8px;
-            text-transform: uppercase;
-        }
-
-        .header h2 {
-            margin: 1mm 0 0 0;
-            font-size: 16px;
-            letter-spacing: 0.8px;
-            text-transform: uppercase;
-        }
+        .header .line1 { font-size: 17pt; margin: 0; }
+        .header .line2 { font-size: 15pt; margin: 1mm 0 0 0; }
 
         .crest {
             display: block;
-            margin: 4mm auto 0 auto;
-            width: 22mm;
+            margin: 5mm auto 0 auto;
+            width: 24mm;
             height: auto;
         }
 
-        .layout {
+        .main {
             width: 100%;
-            margin-top: 6mm;
+            margin-top: 8mm;
+            border-collapse: collapse;
         }
 
-        .layout td { vertical-align: top; }
+        .main td { vertical-align: top; }
 
         .photo-cell {
-            width: 24%;
-            padding-right: 4mm;
+            width: 22%;
+            text-align: center;
+            padding-top: 8mm;
         }
 
         .photo-cell img {
             width: 28mm;
             height: 34mm;
             object-fit: cover;
-            border: 1px solid #888;
+            border: 1px solid #999;
             background: #fff;
         }
 
         .body-cell {
-            width: 76%;
+            width: 78%;
             text-align: center;
-            padding-top: 4mm;
+            padding: 4mm 2mm 0 4mm;
         }
 
-        .lead { font-size: 13px; margin: 0 0 4mm 0; }
-        .student-name {
-            font-size: 22px;
-            font-style: italic;
-            font-weight: bold;
+        .lead {
+            font-size: 12.5pt;
             margin: 0 0 5mm 0;
         }
-        .bridge { font-size: 12px; margin: 0 0 2mm 0; }
-        .degree-name {
-            font-size: 16px;
+
+        .student-name {
+            font-size: 21pt;
             font-style: italic;
             font-weight: bold;
-            margin: 4mm 0;
+            margin: 0 0 6mm 0;
+            line-height: 1.2;
+        }
+
+        .bridge {
+            font-size: 12pt;
+            margin: 0 0 2.5mm 0;
             line-height: 1.35;
         }
-        .class-line { font-size: 12px; font-style: italic; margin: 3mm 0; }
-        .institution { font-size: 12px; margin: 3mm 0 4mm 0; }
-        .date-line { font-size: 12px; font-weight: bold; margin-top: 3mm; }
 
-        .signatures {
-            position: absolute;
-            left: 10mm;
-            right: 10mm;
-            bottom: 14mm;
+        .degree-name {
+            font-size: 15pt;
+            font-style: italic;
+            font-weight: bold;
+            margin: 5mm 0;
+            line-height: 1.35;
         }
 
-        .signatures table { width: 100%; border-collapse: collapse; }
+        .class-line {
+            font-size: 12pt;
+            font-style: italic;
+            margin: 4mm 0;
+        }
+
+        .institution {
+            font-size: 12pt;
+            margin: 4mm 0 5mm 0;
+        }
+
+        .date-line {
+            font-size: 12pt;
+            font-weight: bold;
+            margin-top: 3mm;
+        }
+
+        .signatures {
+            width: 100%;
+            margin-top: 28mm;
+            border-collapse: collapse;
+        }
+
         .signatures td {
             width: 50%;
             text-align: center;
             vertical-align: bottom;
-            padding: 0 8mm;
+            padding: 0 6mm;
         }
 
-        .signatures img.vc { width: 42mm; height: auto; margin-bottom: 1mm; }
-        .signatures img.registrar { width: 40mm; height: auto; margin-bottom: 1mm; }
+        .signatures img.vc {
+            width: 48mm;
+            height: auto;
+            display: block;
+            margin: 0 auto 2mm auto;
+        }
+
+        .signatures img.registrar {
+            width: 46mm;
+            height: auto;
+            display: block;
+            margin: 0 auto 2mm auto;
+        }
 
         .sign-title {
             font-family: Arial, Helvetica, sans-serif;
-            font-size: 9px;
+            font-size: 8.5pt;
             font-weight: bold;
-            letter-spacing: 0.4px;
+            letter-spacing: 0.5px;
             text-transform: uppercase;
-            border-top: 1px solid #333;
+            border-top: 1px solid #222;
             display: inline-block;
-            min-width: 48mm;
-            padding-top: 1.5mm;
+            min-width: 52mm;
+            padding-top: 2mm;
         }
     </style>
 </head>
 <body>
 <div class="page">
-    <div class="border-frame">
-        <div class="header">
-            <h1>University of Saint Joseph</h1>
-            <h2>Mbarara</h2>
-            <img class="crest" src="{{ public_path('images/usj-crest.png') }}" alt="USJ Crest">
-        </div>
-
-        <table class="layout">
-            <tr>
-                <td class="photo-cell">
-                    <img src="{{ $photo_path }}" alt="Student Photo">
-                </td>
-                <td class="body-cell">
-                    <p class="lead">This is to certify that</p>
-                    <p class="student-name">{{ $student_name }}</p>
-                    <p class="bridge">has successfully completed a</p>
-                    <p class="bridge">Course of study leading to the award of</p>
-                    <p class="degree-name">{{ ucwords(strtolower($award)) }}</p>
-                    <p class="class-line">Class: {{ $degree_class }}</p>
-                    <p class="institution">of University Of Saint Joseph Mbarara</p>
-                    <p class="date-line">Date: {{ $issue_date }}</p>
-                </td>
-            </tr>
-        </table>
-
-        <div class="signatures">
-            <table>
-                <tr>
-                    <td>
-                        <img class="vc" src="{{ $vc_signature }}" alt="Vice Chancellor Signature">
-                        <div class="sign-title">Vice Chancellor</div>
-                    </td>
-                    <td>
-                        <img class="registrar" src="{{ $registrar_stamp }}" alt="Registrar Stamp">
-                        <div class="sign-title">Academic Registrar</div>
-                    </td>
-                </tr>
-            </table>
-        </div>
+    <div class="header">
+        <p class="line1">University of Saint Joseph</p>
+        <p class="line2">Mbarara</p>
+        @if ($crest_data_uri)
+            <img class="crest" src="{{ $crest_data_uri }}" alt="USJ Crest">
+        @endif
     </div>
+
+    <table class="main">
+        <tr>
+            <td class="photo-cell">
+                @if ($photo_data_uri)
+                    <img src="{{ $photo_data_uri }}" alt="Student Photo">
+                @endif
+            </td>
+            <td class="body-cell">
+                <p class="lead">This is to certify that</p>
+                <p class="student-name">{{ $student_name }}</p>
+                <p class="bridge">has successfully completed a</p>
+                <p class="bridge">Course of study leading to the award of</p>
+                <p class="degree-name">{{ ucwords(strtolower($award)) }}</p>
+                <p class="class-line">Class: {{ $degree_class }}</p>
+                <p class="institution">of University Of Saint Joseph Mbarara</p>
+                <p class="date-line">Date: {{ $issue_date }}</p>
+            </td>
+        </tr>
+    </table>
+
+    <table class="signatures">
+        <tr>
+            <td>
+                @if ($vc_signature_data_uri)
+                    <img class="vc" src="{{ $vc_signature_data_uri }}" alt="Vice Chancellor Signature">
+                @endif
+                <div class="sign-title">Vice Chancellor</div>
+            </td>
+            <td>
+                @if ($registrar_stamp_data_uri)
+                    <img class="registrar" src="{{ $registrar_stamp_data_uri }}" alt="Registrar Stamp and Signature">
+                @endif
+                <div class="sign-title">Academic Registrar</div>
+            </td>
+        </tr>
+    </table>
 </div>
 </body>
 </html>

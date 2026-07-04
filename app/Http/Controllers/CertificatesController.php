@@ -122,13 +122,17 @@ class CertificatesController extends Controller
             'faculty'          => CertificatePresenter::facultyName($student),
             'program'          => CertificatePresenter::programName($student),
             'photo_path'       => CertificatePresenter::photoPath($student),
+            'photo_data_uri'   => CertificatePresenter::photoDataUri($student),
+            'crest_data_uri'   => CertificatePresenter::crestDataUri(),
             'serial_number'    => CertificatePresenter::serialNumber($student),
             'completion_year'  => CertificatePresenter::completionYear(),
             'issue_date'       => CertificatePresenter::formattedDate(),
             'student_fullname' => CertificatePresenter::studentFullName($student),
             'student_name'     => CertificatePresenter::studentDisplayName($student),
             'registrar_stamp'  => CertificatePresenter::registrarStampPath(),
+            'registrar_stamp_data_uri' => CertificatePresenter::registrarStampDataUri(),
             'vc_signature'     => CertificatePresenter::vcSignaturePath(),
+            'vc_signature_data_uri'    => CertificatePresenter::vcSignatureDataUri(),
         ];
     }
 

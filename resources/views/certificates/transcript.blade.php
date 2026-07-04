@@ -21,20 +21,7 @@
             width: 100%;
             border: 3px double #E89828;
             padding: 4mm;
-            position: relative;
         }
-
-        .watermark {
-            position: absolute;
-            top: 42%;
-            left: 50%;
-            margin-left: -45mm;
-            opacity: 0.05;
-            width: 90mm;
-            z-index: 0;
-        }
-
-        .inner { position: relative; z-index: 1; }
 
         .header { text-align: center; margin-bottom: 2mm; }
 
@@ -58,7 +45,7 @@
         .student-box { width: 100%; border: 1px solid #000; margin-bottom: 2mm; table-layout: fixed; }
         .student-box td { border: 1px solid #000; padding: 2mm; vertical-align: top; }
         .student-box .photo { width: 18%; text-align: center; }
-        .student-box .photo img { width: 24mm; height: 30mm; border: 1px solid #888; }
+        .student-box .photo img { width: 24mm; height: 30mm; border: 1px solid #888; object-fit: cover; }
         .student-box .meta { width: 57%; font-size: 8px; line-height: 1.45; }
         .student-box .meta b { display: inline-block; width: 28mm; }
         .student-box .qr { width: 25%; text-align: center; font-size: 7px; }
@@ -144,111 +131,113 @@
 <body>
 
 <div class="sheet">
-    <img class="watermark" src="{{ public_path('images/usj-crest.png') }}" alt="">
+    <div class="header">
+        @if ($crest_data_uri)
+            <img class="crest" src="{{ $crest_data_uri }}" alt="USJ Crest">
+        @endif
+        <p class="uni-name">University of Saint Joseph</p>
+        <p class="uni-city">Mbarara</p>
+        <p class="contact">
+            P.O. Box 219, Mbarara Uganda<br>
+            Tel: +256 772 065667 / +256 705 706681<br>
+            Email: uosj@uosj.ac.ug, www.uosj.ac.ug
+        </p>
+        <p class="office">Office of the Academic Registrar</p>
+    </div>
 
-    <div class="inner">
-        <div class="header">
-            <img class="crest" src="{{ public_path('images/usj-crest.png') }}" alt="USJ Crest">
-            <p class="uni-name">University of Saint Joseph</p>
-            <p class="uni-city">Mbarara</p>
-            <p class="contact">
-                P.O. Box 219, Mbarara Uganda<br>
-                Tel: +256 772 065667 / +256 705 706681<br>
-                Email: uosj@uosj.ac.ug, www.uosj.ac.ug
-            </p>
-            <p class="office">Office of the Academic Registrar</p>
-        </div>
+    <div class="title-bar">ACADEMIC TRANSCRIPT</div>
 
-        <div class="title-bar">ACADEMIC TRANSCRIPT</div>
+    <table class="student-box">
+        <tr>
+            <td class="photo">
+                @if ($photo_data_uri)
+                    <img src="{{ $photo_data_uri }}" alt="Student Photo">
+                @endif
+            </td>
+            <td class="meta">
+                <div><b>REGISTRATION NO:</b> {{ strtoupper($student->reg_number) }}</div>
+                <div><b>NAME:</b> {{ $student_fullname }}</div>
+                <div><b>EMAIL:</b> {{ strtoupper($student->email) }}</div>
+                <div><b>PHONE:</b> {{ strtoupper($student->phone ?: 'N/A') }}</div>
+                <div><b>FACULTY:</b> {{ $faculty }}</div>
+                <div><b>PROGRAM:</b> {{ $program }}</div>
+                <div><b>COMPLETION YEAR:</b> {{ $completion_year }}</div>
+            </td>
+            <td class="qr">
+                <img src="data:image/png;base64,{{ base64_encode(QrCode::format('png')->size(90)->generate('USJ Transcript | ' . $student->reg_number . ' | ' . $student_fullname)) }}" alt="QR">
+                <div style="margin-top:1mm;">{{ $serial_number }}</div>
+            </td>
+        </tr>
+    </table>
 
-        <table class="student-box">
+    <table class="semester-grid">
+        @foreach (array_chunk($semesters, 2) as $row)
             <tr>
-                <td class="photo">
-                    <img src="{{ $photo_path }}" alt="Student Photo">
-                </td>
-                <td class="meta">
-                    <div><b>REGISTRATION NO:</b> {{ strtoupper($student->reg_number) }}</div>
-                    <div><b>NAME:</b> {{ $student_fullname }}</div>
-                    <div><b>EMAIL:</b> {{ strtoupper($student->email) }}</div>
-                    <div><b>PHONE:</b> {{ strtoupper($student->phone ?: 'N/A') }}</div>
-                    <div><b>FACULTY:</b> {{ $faculty }}</div>
-                    <div><b>PROGRAM:</b> {{ $program }}</div>
-                    <div><b>COMPLETION YEAR:</b> {{ $completion_year }}</div>
-                </td>
-                <td class="qr">
-                    <img src="data:image/png;base64,{{ base64_encode(QrCode::format('png')->size(90)->generate('USJ Transcript | ' . $student->reg_number . ' | ' . $student_fullname)) }}" alt="QR">
-                    <div style="margin-top:1mm;">{{ $serial_number }}</div>
-                </td>
-            </tr>
-        </table>
-
-        <table class="semester-grid">
-            @foreach (array_chunk($semesters, 2) as $row)
-                <tr>
-                    @foreach ($row as $colIndex => $semester)
-                        <td>
-                            <p class="semester-title">{{ $semester['title'] }}</p>
-                            <table class="course-table">
-                                <thead>
-                                    <tr>
-                                        <th style="width:16%;">CODE</th>
-                                        <th style="width:44%;">COURSE/SUBJECT TITLE</th>
-                                        <th style="width:10%;">CU</th>
-                                        <th style="width:15%;">GP</th>
-                                        <th style="width:15%;">GD</th>
+                @foreach ($row as $colIndex => $semester)
+                    <td>
+                        <p class="semester-title">{{ $semester['title'] }}</p>
+                        <table class="course-table">
+                            <thead>
+                                <tr>
+                                    <th style="width:16%;">CODE</th>
+                                    <th style="width:44%;">COURSE/SUBJECT TITLE</th>
+                                    <th style="width:10%;">CU</th>
+                                    <th style="width:15%;">GP</th>
+                                    <th style="width:15%;">GD</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach ($semester['courses'] as $courseIndex => $course)
+                                    <tr class="{{ $courseIndex % 2 ? 'alt' : '' }}">
+                                        <td>{{ $course['code'] }}</td>
+                                        <td class="left">{{ strtoupper($course['name']) }}</td>
+                                        <td>{{ $course['credits'] }}</td>
+                                        <td>{{ number_format($course['gp'], 1) }}</td>
+                                        <td>{{ $course['gd'] }}</td>
                                     </tr>
-                                </thead>
-                                <tbody>
-                                    @foreach ($semester['courses'] as $courseIndex => $course)
-                                        <tr class="{{ $courseIndex % 2 ? 'alt' : '' }}">
-                                            <td>{{ $course['code'] }}</td>
-                                            <td class="left">{{ strtoupper($course['name']) }}</td>
-                                            <td>{{ $course['credits'] }}</td>
-                                            <td>{{ number_format($course['gp'], 1) }}</td>
-                                            <td>{{ $course['gd'] }}</td>
-                                        </tr>
-                                    @endforeach
-                                </tbody>
-                            </table>
-                            <div class="gpa-row">
-                                GPA. {{ number_format($semester['gpa'], 2) }}
-                                @if ($colIndex === 1 || ($loop->parent->last && $loop->last))
-                                    &nbsp;&nbsp;&nbsp; CGPA {{ number_format($semester['cgpa'], 2) }}
-                                @endif
-                            </div>
-                        </td>
-                    @endforeach
-                    @if (count($row) === 1)
-                        <td></td>
-                    @endif
-                </tr>
-            @endforeach
-        </table>
-
-        <div class="summary">
-            FINAL CGPA: {{ number_format($final_cgpa, 2) }}<br>
-            AWARD: {{ $award }}<br>
-            CLASS: {{ $class_label }}
-        </div>
-
-        <table class="auth">
-            <tr>
-                <td style="width:42%;" class="stamp">
-                    <img src="{{ $registrar_stamp }}" alt="Registrar Stamp">
-                </td>
-                <td style="width:58%;" class="sign">
-                    Signed: Academic Registrar<br>
-                    Date &amp; Stamp: {{ now()->format('d/m/Y') }}
-                </td>
+                                @endforeach
+                            </tbody>
+                        </table>
+                        <div class="gpa-row">
+                            GPA. {{ number_format($semester['gpa'], 2) }}
+                            @if ($colIndex === 1 || ($loop->parent->last && $loop->last))
+                                &nbsp;&nbsp;&nbsp; CGPA {{ number_format($semester['cgpa'], 2) }}
+                            @endif
+                        </div>
+                    </td>
+                @endforeach
+                @if (count($row) === 1)
+                    <td></td>
+                @endif
             </tr>
-        </table>
+        @endforeach
+    </table>
 
-        <div class="note-box">
-            <b>NOTE:</b>
-            1. The transcript is not valid without the official stamp of the University of Saint Joseph Mbarara.
-            2. The Medium of Instruction is English (UK).
-            3. This transcript is verifiable online at https://e-learning.uosj.ac.ug
-        </div>
+    <div class="summary">
+        FINAL CGPA: {{ number_format($final_cgpa, 2) }}<br>
+        AWARD: {{ $award }}<br>
+        CLASS: {{ $class_label }}
+    </div>
+
+    <table class="auth">
+        <tr>
+            <td style="width:42%;" class="stamp">
+                @if ($registrar_stamp_data_uri)
+                    <img src="{{ $registrar_stamp_data_uri }}" alt="Registrar Stamp">
+                @endif
+            </td>
+            <td style="width:58%;" class="sign">
+                Signed: Academic Registrar<br>
+                Date &amp; Stamp: {{ now()->format('d/m/Y') }}
+            </td>
+        </tr>
+    </table>
+
+    <div class="note-box">
+        <b>NOTE:</b>
+        1. The transcript is not valid without the official stamp of the University of Saint Joseph Mbarara.
+        2. The Medium of Instruction is English (UK).
+        3. This transcript is verifiable online at https://e-learning.uosj.ac.ug
     </div>
 </div>
 

@@ -7,13 +7,108 @@ use Illuminate\Support\Str;
 
 class CertificatePresenter
 {
+    public static function imageDataUri(?string $absolutePath): ?string
+    {
+        if (!$absolutePath || !is_file($absolutePath) || !is_readable($absolutePath)) {
+            return null;
+        }
+
+        $mime = mime_content_type($absolutePath) ?: 'image/png';
+        $contents = @file_get_contents($absolutePath);
+
+        if ($contents === false) {
+            return null;
+        }
+
+        return 'data:' . $mime . ';base64,' . base64_encode($contents);
+    }
+
     public static function photoPath(Student $student): string
     {
-        if ($student->profile_img && file_exists(storage_path('app/public/' . $student->profile_img))) {
-            return storage_path('app/public/' . $student->profile_img);
+        foreach (self::photoCandidatePaths($student) as $path) {
+            if (is_file($path)) {
+                return $path;
+            }
         }
 
         return public_path('images/profile.jpg');
+    }
+
+    /** @return array<int, string> */
+    public static function photoCandidatePaths(Student $student): array
+    {
+        if (!$student->profile_img) {
+            return [public_path('images/profile.jpg')];
+        }
+
+        $relative = ltrim($student->profile_img, '/');
+
+        return array_values(array_unique([
+            storage_path('app/public/' . $relative),
+            public_path('storage/' . $relative),
+            public_path($relative),
+        ]));
+    }
+
+    public static function photoDataUri(Student $student): ?string
+    {
+        foreach (self::photoCandidatePaths($student) as $path) {
+            $uri = self::imageDataUri($path);
+            if ($uri) {
+                return $uri;
+            }
+        }
+
+        return self::imageDataUri(public_path('images/profile.jpg'));
+    }
+
+    public static function crestDataUri(): ?string
+    {
+        foreach ([
+            public_path('images/usj-crest.png'),
+            public_path('images/usjm.png'),
+        ] as $path) {
+            $uri = self::imageDataUri($path);
+            if ($uri) {
+                return $uri;
+            }
+        }
+
+        return null;
+    }
+
+    public static function registrarStampDataUri(): ?string
+    {
+        foreach ([
+            public_path('images/usoj/degree-registrar-stamp.png'),
+            public_path('images/usoj/registrar-stamp.png'),
+        ] as $path) {
+            $uri = self::imageDataUri($path);
+            if ($uri) {
+                return $uri;
+            }
+        }
+
+        return null;
+    }
+
+    public static function vcSignatureDataUri(): ?string
+    {
+        foreach ([
+            public_path('images/usoj/vc-signature.png'),
+        ] as $path) {
+            $uri = self::imageDataUri($path);
+            if ($uri) {
+                return $uri;
+            }
+        }
+
+        return null;
+    }
+
+    public static function degreeBackgroundColor(): string
+    {
+        return '#FDF5E6';
     }
 
     public static function photoUrl(Student $student): string
