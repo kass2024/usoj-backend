@@ -1,0 +1,6 @@
+[14-Jun-2025 19:32:25 Africa/Cairo] PHP Fatal error:  Cannot declare class App\Http\Controllers\StudentController, because the name is already in use in /home/istbobjg/foad.istburkinafaso.com/storage/framework/views/12538861f89be556565596a5c23f4b20.php on line 14
+[17-Aug-2025 15:37:03 Africa/Cairo] PHP Fatal error:  Cannot declare class App\Http\Controllers\CertificatesController, because the name is already in use in /home/istbu/foad.istburkinafaso.com/storage/framework/views/dd4896f91abd3b90624ddf5de72c481d.php on line 10
+[28-Aug-2025 11:20:24 Africa/Cairo] PHP Fatal error:  Cannot redeclare App\Models\Modules::classYear() in /home/istbu/foad.istburkinafaso.com/app/Models/Modules.php on line 43
+[29-Aug-2025 08:17:53 Africa/Cairo] PHP Fatal error:  Cannot redeclare App\Models\Student::department() in /home/istbu/foad.istburkinafaso.com/app/Models/Student.php on line 56
+[29-Aug-2025 08:20:09 Africa/Cairo] PHP Fatal error:  Cannot redeclare App\Models\Student::degree_level() in /home/istbu/foad.istburkinafaso.com/app/Models/Student.php on line 58
+[29-Aug-2025 08:21:03 Africa/Cairo] PHP Fatal error:  Cannot redeclare App\Models\ClassStudent::student() in /home/istbu/foad.istburkinafaso.com/app/Models/ClassStudent.php on line 21
