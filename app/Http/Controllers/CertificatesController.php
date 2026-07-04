@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Student;
 use App\Models\Modules;
-use Illuminate\Http\Request;
+use App\Models\Student;
+use App\Support\CertificateGrades;
+use App\Support\CertificatePresenter;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Http\Request;
 
 class CertificatesController extends Controller
 {
@@ -36,19 +38,48 @@ class CertificatesController extends Controller
     public function generateTranscript(Request $request, $studentId)
     {
         $studentId = decrypt($studentId);
-        $student = Student::with(['department', 'degree_level'])->findOrFail($studentId);
+        $student = Student::with(['department.school', 'degree_level'])->findOrFail($studentId);
 
-        $coursesByYear = $this->getStudentCoursesFromSubmissions($student);
-
-        $transcriptData = [
-            'student' => $student,
-            'courses' => $coursesByYear,
-        ];
-
-        $pdf = Pdf::loadView('certificates.transcript', $transcriptData)
+        $pdf = Pdf::loadView('certificates.transcript', $this->buildCertificateData($student))
             ->setPaper('a4', 'portrait');
 
         return $pdf->stream($student->reg_number . '_transcript.pdf');
+    }
+
+    public function generateDegree(Request $request, $studentId)
+    {
+        $studentId = decrypt($studentId);
+        $student = Student::with(['department.school', 'degree_level'])->findOrFail($studentId);
+
+        $pdf = Pdf::loadView('certificates.degree', $this->buildCertificateData($student))
+            ->setPaper('a4', 'portrait');
+
+        return $pdf->stream($student->reg_number . '_degree.pdf');
+    }
+
+    private function buildCertificateData(Student $student): array
+    {
+        $grouped = $this->getStudentCoursesFromSubmissions($student);
+        $semesters = CertificateGrades::buildSemesters($grouped);
+        $finalCgpa = CertificateGrades::finalCgpa($semesters);
+
+        return [
+            'student'          => $student,
+            'courses'          => $grouped,
+            'semesters'        => $semesters,
+            'final_cgpa'       => $finalCgpa,
+            'award'            => CertificatePresenter::awardName($student),
+            'class_label'      => CertificateGrades::classifyCgpa($finalCgpa),
+            'degree_class'     => CertificateGrades::degreeClassLabel($finalCgpa),
+            'faculty'          => CertificatePresenter::facultyName($student),
+            'program'          => CertificatePresenter::programName($student),
+            'photo_path'       => CertificatePresenter::photoPath($student),
+            'serial_number'    => CertificatePresenter::serialNumber($student),
+            'completion_year'  => CertificatePresenter::completionYear(),
+            'issue_date'       => CertificatePresenter::formattedDate(),
+            'student_fullname' => CertificatePresenter::studentFullName($student),
+            'student_name'     => CertificatePresenter::studentDisplayName($student),
+        ];
     }
 
     private function getStudentCoursesFromSubmissions(Student $student): array
@@ -70,9 +101,9 @@ class CertificatesController extends Controller
                 },
             ])
             ->where(function ($q) use ($studentId) {
-                $q->whereHas('assignments.submissions', fn($qq) => $qq->where('student_id', $studentId))
-                  ->orWhereHas('quizzes.submissions', fn($qq) => $qq->where('student_id', $studentId))
-                  ->orWhereHas('exams.submissions', fn($qq) => $qq->where('student_id', $studentId));
+                $q->whereHas('assignments.submissions', fn ($qq) => $qq->where('student_id', $studentId))
+                    ->orWhereHas('quizzes.submissions', fn ($qq) => $qq->where('student_id', $studentId))
+                    ->orWhereHas('exams.submissions', fn ($qq) => $qq->where('student_id', $studentId));
             })
             ->get();
 
@@ -80,27 +111,42 @@ class CertificatesController extends Controller
 
         foreach ($modules as $module) {
             $course = $module->course;
-            if (!$course) continue;
+            if (!$course) {
+                continue;
+            }
 
             $total = 0.0;
-            $max   = 0.0;
-            $has   = false;
+            $max = 0.0;
+            $has = false;
 
-            // Assignment=30, Quiz=30, Exam=40
             foreach ($module->assignments as $assignment) {
                 $sub = $assignment->submissions->first();
-                if ($sub) { $total += (float)$sub->marks_obtained; $max += 30; $has = true; }
+                if ($sub) {
+                    $total += (float) $sub->marks_obtained;
+                    $max += 30;
+                    $has = true;
+                }
             }
             foreach ($module->quizzes as $quiz) {
                 $sub = $quiz->submissions->first();
-                if ($sub) { $total += (float)$sub->marks_obtained; $max += 30; $has = true; }
+                if ($sub) {
+                    $total += (float) $sub->marks_obtained;
+                    $max += 30;
+                    $has = true;
+                }
             }
             foreach ($module->exams as $exam) {
                 $sub = $exam->submissions->first();
-                if ($sub) { $total += (float)$sub->marks_obtained; $max += 40; $has = true; }
+                if ($sub) {
+                    $total += (float) $sub->marks_obtained;
+                    $max += 40;
+                    $has = true;
+                }
             }
 
-            if (!$has) continue;
+            if (!$has) {
+                continue;
+            }
 
             $moduleClassYear = $module->class_year;
             $yearName = $moduleClassYear->year_name ?? ($moduleClassYear->name ?? 'Year');
@@ -110,15 +156,10 @@ class CertificatesController extends Controller
 
             $yearKey = trim($yearName . ' — ' . $ayName);
 
-            // Final mark out of 20
             $marksOver20 = $max > 0 ? round(($total / $max) * 20, 2) : 0.0;
-            $percentage  = $max > 0 ? round(($total / $max) * 100, 2) : 0.0;
-
-            $credits     = (int) ($course->credits ?? 0);
-
-            // ✅ new formulas
-            $creditMax   = round($credits * $marksOver20, 2); // credits × mark(/20)
-            $creditMarks = $creditMax;                        // same as above
+            $percentage = $max > 0 ? round(($total / $max) * 100, 2) : 0.0;
+            $credits = (int) ($course->credits ?? 0);
+            $creditMax = round($credits * $marksOver20, 2);
 
             $courseKey = $course->code ?: ('course_' . $module->id);
 
@@ -126,10 +167,10 @@ class CertificatesController extends Controller
                 'code'         => $course->code,
                 'name'         => $course->name,
                 'credits'      => $credits,
-                'marks'        => $marksOver20,   // /20
-                'credit_max'   => $creditMax,     // ✅ credits × mark(/20)
-                'credit_marks' => $creditMarks,   // ✅ same value
-                'percentage'   => $percentage,    // %
+                'marks'        => $marksOver20,
+                'credit_max'   => $creditMax,
+                'credit_marks' => $creditMax,
+                'percentage'   => $percentage,
             ];
         }
 
@@ -140,32 +181,4 @@ class CertificatesController extends Controller
 
         return $grouped;
     }
-    public function generateDegree(Request $request, $studentId)
-    {
-        $studentId = decrypt($studentId);
-        // Load student with related data, including academic_year
-        $student = Student::with([
-            'department',
-            'degree_level',
-            'class_students.class_year.academic_year', // <-- Add this line
-            'class_students.class_year.modules.assignments.submissions',
-            'class_students.class_year.modules.quizzes.submissions',
-            'class_students.class_year.modules.exams.submissions',
-            'class_students.class_year.modules.course',
-        ])->findOrFail($studentId);
-
-        // Prepare data for PDF
-        $transcriptData = [
-            'student' => $student,
-            'courses' => $this->getStudentCoursesFromSubmissions($student),
-        ];
-
-        // Render the view for testing
-        // return view('certificates.degree', $transcriptData);
-
-        $pdf = Pdf::loadView('certificates.degree', $transcriptData)
-            ->setPaper("a4", "landscape");
-        return $pdf->stream($student->reg_number . '_degree.pdf');
-    }
-
 }

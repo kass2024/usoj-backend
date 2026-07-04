@@ -1,241 +1,395 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Transcript</title>
+    <meta charset="UTF-8">
+    <title>USJ Academic Transcript</title>
     <style>
-        /* Dompdf page */
         @page { size: A4 portrait; margin: 0; }
 
-        :root{
-            /* Header/footer geometry */
-            --header-h: 38mm;      /* height reserved for header image */
-            --footer-h: 27mm;      /* height reserved for footer image */
-            --side-pad: 10mm;      /* horizontal padding for content */
+        * { box-sizing: border-box; }
 
-            /* Spacing tweaks */
-            --note-gap: 3.5mm;     /* space between footer-note and footer image */
+        body {
+            margin: 0;
+            font-family: "Times New Roman", Times, serif;
+            font-size: 9px;
+            color: #000;
         }
 
-        body { margin: 0; font-family: Arial, sans-serif; font-size: 12px; }
-
-        /* One physical page */
-        .page{
-            position: relative;
+        .page {
             width: 210mm;
             height: 297mm;
             page-break-after: always;
+            position: relative;
+            padding: 8mm;
             overflow: hidden;
         }
-        .page:last-of-type { page-break-after: auto; }
 
-        /* Header/Footer blocks */
-        .page__header,
-        .page__footer{
-            position: absolute;
-            left: 0; width: 100%;
-        }
-        .page__header{ top: 0; height: var(--header-h); }
+        .page:last-child { page-break-after: auto; }
 
-        /* Footer locked at bottom edge */
-        .page__footer{
-            bottom: 0;
-            height: var(--footer-h);
-        }
-
-        .page__header img,
-        .page__footer img{
-            width: 100%;
+        .frame {
+            border: 3px double #E89828;
             height: 100%;
-            display: block;
-            object-fit: contain;          /* Avoid cropping; keep proportions */
-            object-position: center;      /* Center the art */
+            padding: 5mm;
+            position: relative;
         }
 
-        /* Content between header and footer */
-        .page__content{
+        .watermark {
             position: absolute;
-            top: var(--header-h);
-            bottom: var(--footer-h);
-            left: 0; right: 0;
-            padding: 0 var(--side-pad);
+            top: 38%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            opacity: 0.06;
+            width: 120mm;
+            z-index: 0;
         }
 
-        .header{ text-align: center; margin: 6mm 0 4mm 0; }
+        .content { position: relative; z-index: 1; }
 
-        .meta{
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            grid-column-gap: 8mm;
-            grid-row-gap: 2mm;
-            margin-bottom: 6mm;
+        .header {
+            text-align: center;
+            margin-bottom: 2mm;
         }
-        .meta p{ margin: 0; }
-        .bold{ font-weight: bold; }
 
-        /* Section title shows YEAR (not academic year) */
-        .year-title{
-            background-color: #f0f0f0;
+        .header img {
+            width: 18mm;
+            height: auto;
+            margin-bottom: 1mm;
+        }
+
+        .header .uni-name {
+            font-size: 13px;
             font-weight: bold;
-            text-align: left;
-            padding: 6px 8px;
-            margin: 6mm 0 3mm 0;
+            margin: 0;
+            letter-spacing: 0.3px;
+        }
+
+        .header .uni-city {
+            font-size: 12px;
+            font-weight: bold;
+            margin: 0;
+        }
+
+        .header .contact {
+            font-size: 8px;
+            line-height: 1.35;
+            margin: 1mm 0 0 0;
+        }
+
+        .header .office {
+            font-size: 9px;
+            font-weight: bold;
+            margin-top: 1mm;
+        }
+
+        .title-bar {
+            background: #E89828;
+            color: #fff;
+            text-align: center;
+            font-weight: bold;
+            font-size: 11px;
+            padding: 2mm 0;
+            letter-spacing: 0.5px;
+            margin: 2mm 0 3mm 0;
+        }
+
+        .student-box {
+            width: 100%;
+            border: 1px solid #000;
+            border-collapse: collapse;
+            margin-bottom: 3mm;
+        }
+
+        .student-box td {
+            vertical-align: top;
+            padding: 2mm;
             border: 1px solid #000;
         }
 
-        table{ width:100%; border-collapse: collapse; table-layout: fixed; }
-        table, th, td{ border:1px solid #000; }
-        th, td{ padding:5px; text-align:center; word-wrap: break-word; }
-        td.text-left{ text-align:left; }
+        .photo-cell { width: 22%; text-align: center; }
 
-        /* Footer note sits ABOVE the footer image */
-        .footer-note{
-            position: absolute;
-            right: var(--side-pad);
-            bottom: calc(var(--footer-h) + var(--note-gap));
-            text-align: right;
-
-            /* Use Times-style font as in your sample */
-            font-family: "Times New Roman", Times, serif;
-            font-size: 12px;
-            line-height: 1.2;
+        .photo-cell img {
+            width: 28mm;
+            height: 34mm;
+            object-fit: cover;
+            border: 1px solid #999;
         }
 
-        .avoid-break{ break-inside: avoid; }
+        .meta-cell { width: 53%; font-size: 8.5px; }
+
+        .meta-row { margin-bottom: 1.2mm; }
+
+        .meta-row .label {
+            font-weight: bold;
+            display: inline-block;
+            width: 34mm;
+        }
+
+        .meta-row .value {
+            text-transform: uppercase;
+        }
+
+        .qr-cell {
+            width: 25%;
+            text-align: center;
+            font-size: 8px;
+        }
+
+        .qr-cell img { width: 22mm; height: 22mm; }
+
+        .semesters-wrap { width: 100%; }
+
+        .semester-col {
+            width: 49%;
+            display: inline-block;
+            vertical-align: top;
+            margin-bottom: 2mm;
+        }
+
+        .semester-col.left { margin-right: 1%; }
+        .semester-col.right { margin-left: 1%; }
+
+        .semester-title {
+            color: #2980B9;
+            font-weight: bold;
+            font-size: 8px;
+            text-transform: uppercase;
+            margin: 0 0 1mm 0;
+        }
+
+        .course-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 1mm;
+            font-size: 7.5px;
+        }
+
+        .course-table th {
+            border-bottom: 1px solid #2980B9;
+            color: #2980B9;
+            font-weight: bold;
+            padding: 1mm;
+            text-align: center;
+        }
+
+        .course-table td {
+            border-bottom: 1px solid #D9EAF6;
+            padding: 0.8mm 1mm;
+            text-align: center;
+        }
+
+        .course-table tr:nth-child(even) td { background: #F2F7FB; }
+
+        .course-table .subject { text-align: left; }
+
+        .gpa-row {
+            color: #2980B9;
+            font-weight: bold;
+            font-size: 8px;
+            margin-bottom: 2mm;
+        }
+
+        .gpa-row .cgpa { float: right; }
+
+        .summary {
+            margin-top: 2mm;
+            font-size: 9px;
+            font-weight: bold;
+            text-transform: uppercase;
+            line-height: 1.5;
+        }
+
+        .auth-block {
+            margin-top: 3mm;
+            width: 100%;
+        }
+
+        .auth-block td { vertical-align: bottom; }
+
+        .stamp {
+            width: 28mm;
+            height: 28mm;
+            border: 2px solid #2980B9;
+            border-radius: 50%;
+            color: #2980B9;
+            font-size: 6px;
+            text-align: center;
+            padding: 4mm 2mm;
+            line-height: 1.3;
+            font-weight: bold;
+        }
+
+        .sign-block {
+            text-align: right;
+            font-size: 8px;
+            line-height: 1.4;
+        }
+
+        .note-box {
+            background: #E89828;
+            color: #000;
+            margin-top: 3mm;
+            padding: 2mm 3mm;
+            font-size: 7.5px;
+            line-height: 1.45;
+        }
+
+        .note-box .note-label {
+            color: #fff;
+            font-weight: bold;
+            margin-right: 2mm;
+        }
+
+        /* Page 2 grading key */
+        .key-title {
+            text-align: center;
+            font-size: 12px;
+            font-weight: bold;
+            text-transform: uppercase;
+            margin-bottom: 4mm;
+        }
+
+        .section-title {
+            font-weight: bold;
+            font-size: 9px;
+            margin: 3mm 0 1.5mm 0;
+            text-transform: uppercase;
+        }
+
+        .key-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 7.5px;
+            margin-bottom: 2mm;
+        }
+
+        .key-table, .key-table th, .key-table td {
+            border: 1px solid #000;
+        }
+
+        .key-table th, .key-table td {
+            padding: 1mm;
+            vertical-align: top;
+        }
     </style>
 </head>
 <body>
 
-@php
-    /* === Academic Year labels (for header/meta only) === */
-    $academicYearLabels = [];
-    $reg = (string)($student->reg_number ?? '');
-    if (\Illuminate\Support\Str::startsWith($reg, '20')) {
-        $baseStart = 2020; // Year 1 -> 2020-2021 (adjust if needed)
-        for ($i = 0; $i < 4; $i++) {
-            $start = $baseStart + $i;
-            $end   = $start + 1;
-            $academicYearLabels[$i + 1] = "{$start}-{$end}";
-        }
-    }
+<div class="page">
+    <div class="frame">
+        <img class="watermark" src="{{ public_path('images/usj-crest.png') }}" alt="">
 
-    /* === Optional specialization lookup per department ===
-       Add more entries as needed: 'Department Name' => '(Speciality ...)'
-    */
-    $specialityByDepartment = [
-        'Mechanical and Production Engineering' => '(Speciality Automotive and Power Engineering)',
-        // 'Electrical Engineering' => '(Speciality Power Systems)',
-        // 'Computer Science' => '(Speciality Software Engineering)',
-    ];
-
-    // Helper to get normalized department name
-    $deptName = trim((string)optional($student->department)->name);
-    $specialityLine = $specialityByDepartment[$deptName] ?? null;
-@endphp
-
-@php $__yearIndex = 0; @endphp
-@foreach ($courses as $__originalKey => $courseData)
-    @php
-        $__yearIndex++;
-
-        /* Header shows Academic Year (computed if reg starts with 20, else fallback) */
-        $academicYear = $academicYearLabels[$__yearIndex] ?? $__originalKey;
-
-        /* Section title shows just Year N */
-        $yearLabel = "Year " . $__yearIndex;
-
-        /* Totals for this page */
-        $i = 0; $totalPercentage = 0; $totalCredMax = 0;
-    @endphp
-
-    <div class="page">
-        <!-- Header image -->
-        <div class="page__header">
-            <img src="{{ public_path('/images/transcript-header.png') }}" alt="Header">
-        </div>
-
-        <!-- Main content -->
-        <div class="page__content">
+        <div class="content">
             <div class="header">
-                <h3 style="margin:0;">ACADEMIC TRANSCRIPT</h3>
+                <img src="{{ public_path('images/usj-crest.png') }}" alt="USJ Crest">
+                <p class="uni-name">University of Saint Joseph</p>
+                <p class="uni-city">Mbarara</p>
+                <p class="contact">
+                    P.O. Box 219, Mbarara Uganda<br>
+                    Tel: +256 772 065667 / +256 705 706681<br>
+                    Email: uosj@uosj.ac.ug, www.uosj.ac.ug
+                </p>
+                <p class="office">Office of the Academic Registrar</p>
             </div>
 
-            <!-- Student meta (Academic Year here) -->
-            <div class="meta">
-                <p><span class="bold">Name:</span> {{ $student->fname }}</p>
-                <p><span class="bold">Surname:</span> {{ $student->lname }}</p>
-                <p><span class="bold">Reg.Number:</span> {{ $student->reg_number }}</p>
-                <p><span class="bold">Academic Year:</span> {{ $academicYear }}</p>
-                <p><span class="bold">Option:</span> {{ $deptName }}</p>
-                <p><span class="bold">Class:</span> {{ $yearLabel }}</p>
-            </div>
+            <div class="title-bar">ACADEMIC TRANSCRIPT</div>
 
-            <table>
-                <thead>
-                    <tr>
-                        <th style="width:14%;">Code</th>
-                        <th style="width:36%;">Course Name</th>
-                        <th style="width:10%;">Credits</th>
-                        <th style="width:12%;">Marks/20</th>
-                        <th style="width:14%;">Credit&nbsp;Max</th>
-                        <th style="width:14%;">Percentage</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach ($courseData as $course)
-                        @php
-                            $i++;
-                            $totalPercentage += $course['percentage'];
-                            $totalCredMax += $course['credit_max'];
-                        @endphp
-                        <tr>
-                            <td>{{ $course['code'] }}</td>
-                            <td class="text-left">{{ $course['name'] }}</td>
-                            <td>{{ $course['credits'] }}</td>
-                            <td>{{ $course['marks'] }}</td>
-                            <td>{{ $course['credit_max'] }}</td>
-                            <td>{{ $course['percentage'] }}</td>
-                        </tr>
-                    @endforeach
-
-                    <!-- Totals -->
-                    <tr class="avoid-break">
-                        <td colspan="2"></td><td></td><td></td>
-                        <td><b>{{ $totalCredMax }}</b></td>
-                        <td><b>{{ round($totalPercentage / max($i,1), 2) }}</b></td>
-                    </tr>
-
-                    <!-- Verdict -->
-                    <tr class="avoid-break">
-                        <td>Verdict</td>
-                        @if ($__yearIndex == 4)
-                            <td colspan="5" style="font-weight:bold">
-                                Promoted to {{ $student->degree_level->name }} in {{ $deptName }}
-                               
-                                   
-                           
-                            </td>
-                        @else
-                            <td colspan="5" style="font-weight:bold">Promoted</td>
-                        @endif
-                    </tr>
-                </tbody>
+            <table class="student-box">
+                <tr>
+                    <td class="photo-cell">
+                        <img src="{{ $photo_path }}" alt="Student Photo">
+                    </td>
+                    <td class="meta-cell">
+                        <div class="meta-row"><span class="label">REGISTRATION NO:</span><span class="value">{{ $student->reg_number }}</span></div>
+                        <div class="meta-row"><span class="label">NAME:</span><span class="value">{{ $student_fullname }}</span></div>
+                        <div class="meta-row"><span class="label">EMAIL:</span><span class="value">{{ $student->email }}</span></div>
+                        <div class="meta-row"><span class="label">PHONE:</span><span class="value">{{ $student->phone ?: 'N/A' }}</span></div>
+                        <div class="meta-row"><span class="label">FACULTY:</span><span class="value">{{ $faculty }}</span></div>
+                        <div class="meta-row"><span class="label">PROGRAM:</span><span class="value">{{ $program }}</span></div>
+                        <div class="meta-row"><span class="label">COMPLETION YEAR:</span><span class="value">{{ $completion_year }}</span></div>
+                    </td>
+                    <td class="qr-cell">
+                        <img src="data:image/png;base64,{{ base64_encode(QrCode::format('png')->size(120)->generate('USJ Transcript | ' . $student->reg_number . ' | ' . $student_fullname)) }}" alt="QR">
+                        <div style="margin-top:1mm;">{{ $serial_number }}</div>
+                    </td>
+                </tr>
             </table>
-        </div>
 
-        <!-- Footer note (Times New Roman style) -->
-        <div class="footer-note">
-            <p style="margin:0;">Ouagadougou, {{ now()->format('d') }}<sup>th</sup> {{ now()->format('F Y') }}</p>
-            <p style="margin:2mm 0 0 0;">Director General</p>
-            <p style="margin:1mm 0 0 0;"><b>Dr Issa COMPAORE</b></p>
-            <p style="margin:1mm 0 0 0;">Officer of Came's International Order of Academic Palms</p>
-        </div>
+            <div class="semesters-wrap">
+                @foreach (array_chunk($semesters, 2) as $row)
+                    <div style="width:100%; overflow:hidden;">
+                        @foreach ($row as $colIndex => $semester)
+                            <div class="semester-col {{ $colIndex === 0 ? 'left' : 'right' }}">
+                                <p class="semester-title">{{ $semester['title'] }}</p>
+                                <table class="course-table">
+                                    <thead>
+                                        <tr>
+                                            <th style="width:14%;">CODE</th>
+                                            <th style="width:46%;">COURSE/SUBJECT TITLE</th>
+                                            <th style="width:10%;">CU</th>
+                                            <th style="width:15%;">GP</th>
+                                            <th style="width:15%;">GD</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach ($semester['courses'] as $course)
+                                            <tr>
+                                                <td>{{ $course['code'] }}</td>
+                                                <td class="subject">{{ $course['name'] }}</td>
+                                                <td>{{ $course['credits'] }}</td>
+                                                <td>{{ number_format($course['gp'], 1) }}</td>
+                                                <td>{{ $course['gd'] }}</td>
+                                            </tr>
+                                        @endforeach
+                                    </tbody>
+                                </table>
+                                <div class="gpa-row">
+                                    GPA. {{ number_format($semester['gpa'], 2) }}
+                                    @if ($colIndex === 1 || ($loop->parent->last && $loop->last))
+                                        <span class="cgpa">CGPA {{ number_format($semester['cgpa'], 2) }}</span>
+                                    @endif
+                                </div>
+                            </div>
+                        @endforeach
+                    </div>
+                @endforeach
+            </div>
 
-        <!-- Footer image (fixed at bottom) -->
-        <div class="page__footer">
-            <img src="{{ public_path('/images/transcript-footer.png') }}" alt="Footer">
+            <div class="summary">
+                FINAL CGPA: {{ number_format($final_cgpa, 2) }}<br>
+                AWARD: {{ $award }}<br>
+                CLASS: {{ $class_label }}
+            </div>
+
+            <table class="auth-block">
+                <tr>
+                    <td style="width:35%;">
+                        <div class="stamp">
+                            UNIVERSITY OF SAINT JOSEPH<br>
+                            ACADEMIC REGISTRAR<br>
+                            Foster Excellence and Integrity
+                        </div>
+                    </td>
+                    <td style="width:65%;">
+                        <div class="sign-block">
+                            Signed: ________________________<br>
+                            Academic Registrar<br>
+                            Date &amp; Stamp: {{ now()->format('d/m/Y') }}
+                        </div>
+                    </td>
+                </tr>
+            </table>
+
+            <div class="note-box">
+                <span class="note-label">NOTE:</span>
+                1. The transcript is not valid without the official stamp of the University of Saint Joseph Mbarara.
+                2. The Medium of Instruction is English (UK).
+                3. This transcript is verifiable online at https://e-learning.uosj.ac.ug
+            </div>
         </div>
     </div>
-@endforeach
+</div>
+
+@include('certificates.transcript-grading-key')
 
 </body>
 </html>

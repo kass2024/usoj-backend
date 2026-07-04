@@ -1,27 +1,50 @@
+# cPanel subdomain document root = e-learning.uosj.ac.ug/ (project root)
+# No need to change document root — this file routes traffic to public/index.php
+
 <IfModule mod_rewrite.c>
-    <IfModule mod_negotiation.c>
-        Options -MultiViews -Indexes
-    </IfModule>
-
+    Options +FollowSymLinks -Indexes
     RewriteEngine On
+    RewriteBase /
 
-    # Handle Authorization Header
+    # Force HTTPS
+    RewriteCond %{HTTPS} off
+    RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+    # Pass Authorization header to PHP
     RewriteCond %{HTTP:Authorization} .
     RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
 
-    # Redirect Trailing Slashes If Not A Folder...
-    RewriteCond %{REQUEST_FILENAME} !-d
-    RewriteCond %{REQUEST_URI} (.+)/$
-    RewriteRule ^ %1 [L,R=301]
+    # Block direct web access to Laravel internals
+    RewriteRule ^(\.env|\.git|app|bootstrap|config|database|resources|routes|storage|tests|vendor)(/|$) - [F,L]
 
-    # Send Requests To Front Controller...
-    RewriteCond %{REQUEST_FILENAME} !-d
-    RewriteCond %{REQUEST_FILENAME} !-f
-    RewriteRule ^ index.php [L]
+    # /public/* URLs — serve static files (matches ASSET_URL=.../public)
+    RewriteRule ^public/ - [L]
+
+    # Map /assets, /images, etc. to files inside public/
+    RewriteCond %{DOCUMENT_ROOT}/public/$1 -f [OR]
+    RewriteCond %{DOCUMENT_ROOT}/public/$1 -d
+    RewriteRule ^(.*)$ public/$1 [L]
+
+    # Application routes → Laravel front controller
+    RewriteCond %{REQUEST_URI} !^/public/
+    RewriteRule ^ public/index.php [L,QSA]
 </IfModule>
-RewriteCond %{HTTPS} off
-RewriteCond %{HTTP:X-Forwarded-SSL} !on
-RewriteCond %{HTTP_HOST} ^foad\.istburkinafaso\.com$ [OR]
-RewriteCond %{HTTP_HOST} ^www\.foad\.istburkinafaso\.com$
-RewriteRule ^/?$ "https\:\/\/foad\.istburkinafaso\.com\/" [R=301,L]
 
+<IfModule LiteSpeed>
+    RewriteEngine On
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^ public/index.php [L,QSA]
+</IfModule>
+
+<IfModule !mod_rewrite.c>
+    FallbackResource /public/index.php
+</IfModule>
+
+<Files .env>
+    Require all denied
+</Files>
+
+<Files .env.cpanel>
+    Require all denied
+</Files>
