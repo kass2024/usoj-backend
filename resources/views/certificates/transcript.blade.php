@@ -101,23 +101,11 @@
         .auth td { vertical-align: bottom; }
         .auth .stamp-cell { width: 40%; text-align: left; }
         .auth .sign-cell { width: 60%; text-align: right; font-size: 8px; line-height: 1.4; padding-left: 2mm; }
-
-        .registrar-stack {
+        .auth .stamp-cell img {
             width: 36mm;
-            text-align: center;
-        }
-
-        .registrar-stack img.stamp {
-            width: 24mm;
-            height: 24mm;
+            max-height: 24mm;
+            height: auto;
             display: block;
-        }
-
-        .registrar-stack img.sig {
-            width: 28mm;
-            max-height: 8mm;
-            display: block;
-            margin: -3mm auto 0 auto;
         }
 
         .note-box {
@@ -244,16 +232,9 @@
     <table class="auth">
         <tr>
             <td class="stamp-cell">
-                <div class="registrar-stack">
-                    @if ($registrar_stamp_only_data_uri)
-                        <img class="stamp" src="{{ $registrar_stamp_only_data_uri }}" alt="Registrar Stamp">
-                    @elseif ($registrar_stamp_data_uri)
-                        <img class="stamp" src="{{ $registrar_stamp_data_uri }}" alt="Registrar Stamp">
-                    @endif
-                    @if ($registrar_signature_only_data_uri)
-                        <img class="sig" src="{{ $registrar_signature_only_data_uri }}" alt="Registrar Signature">
-                    @endif
-                </div>
+                @if ($registrar_stamp_data_uri)
+                    <img src="{{ $registrar_stamp_data_uri }}" alt="Registrar Stamp and Signature">
+                @endif
             </td>
             <td class="sign-cell">
                 Signed: Academic Registrar<br>
