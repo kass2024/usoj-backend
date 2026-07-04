@@ -86,7 +86,6 @@
                     <div class="col-md-9">
                         <h5>{{ $student->fname }} {{ $student->lname }}</h5>
                         <p><strong>Registration Number:</strong> {{ $student->reg_number }}</p>
-                        <p><strong>Email:</strong> {{ $student->email }}</p>
                         <p><strong>Phone:</strong> {{ $student->phone }}</p>
                         <p><strong>Status:</strong>
                             <span class="badge bg-success">{{ ucfirst($student->status) }}</span>
@@ -104,26 +103,9 @@
                         <button type="button" class="btn btn-primary">Generate Transcript</button>
                     </a>
 
-                    <div class="d-flex flex-wrap gap-2 align-items-center">
-                        <a target="_blank"
-                           href="{{ route('certificates.degree', ['id' => encrypt($student->id), 'photo' => 1]) }}"
-                           id="degree-link-with-photo">
-                            <button type="button" class="btn btn-success">Generate Degree</button>
-                        </a>
-                        <a target="_blank"
-                           href="{{ route('certificates.degree', ['id' => encrypt($student->id), 'photo' => 0]) }}"
-                           id="degree-link-no-photo"
-                           class="d-none">
-                            <button type="button" class="btn btn-success">Generate Degree</button>
-                        </a>
-                        <label class="form-check-label ms-1">
-                            <input type="checkbox"
-                                   class="form-check-input"
-                                   id="include-degree-photo"
-                                   checked>
-                            Include student photo on degree
-                        </label>
-                    </div>
+                    <a target="_blank" href="{{ route('certificates.degree', encrypt($student->id)) }}">
+                        <button type="button" class="btn btn-success">Generate Degree</button>
+                    </a>
                 </div>
 
                 <div class="border rounded p-3 bg-light">
@@ -131,35 +113,24 @@
                     <form action="{{ route('certificates.email', encrypt($student->id)) }}" method="post">
                         @csrf
                         <div class="row g-3 align-items-end">
-                            <div class="col-md-4">
+                            <div class="col-md-5">
                                 <label class="form-label small text-muted">Recipient email</label>
                                 <input type="email"
                                        name="email"
                                        class="form-control"
-                                       value="{{ old('email', $student->email) }}"
+                                       value="{{ old('email') }}"
                                        placeholder="name@example.com"
                                        required>
                             </div>
-                            <div class="col-md-3">
+                            <div class="col-md-4">
                                 <label class="form-label small text-muted">Document(s) to send</label>
-                                <select name="documents" class="form-select" id="email-documents" required>
+                                <select name="documents" class="form-select" required>
                                     <option value="transcript" @selected(old('documents') === 'transcript')>Transcript</option>
                                     <option value="degree" @selected(old('documents') === 'degree')>Degree</option>
                                     <option value="both" @selected(old('documents', 'both') === 'both')>Both</option>
                                 </select>
                             </div>
                             <div class="col-md-3">
-                                <label class="form-check-label d-block" id="email-degree-photo-wrap">
-                                    <input type="checkbox"
-                                           name="include_degree_photo"
-                                           value="1"
-                                           class="form-check-input"
-                                           id="email-include-degree-photo"
-                                           checked>
-                                    Include photo on degree
-                                </label>
-                            </div>
-                            <div class="col-md-2">
                                 <button type="submit" class="btn btn-primary w-100">
                                     Send Email
                                 </button>
@@ -169,33 +140,5 @@
                 </div>
             </div>
         </div>
-    @endisset
-
-    @isset($student)
-        <script>
-            document.getElementById('include-degree-photo')?.addEventListener('change', function () {
-                const withPhoto = document.getElementById('degree-link-with-photo');
-                const noPhoto = document.getElementById('degree-link-no-photo');
-                if (!withPhoto || !noPhoto) return;
-                if (this.checked) {
-                    withPhoto.classList.remove('d-none');
-                    noPhoto.classList.add('d-none');
-                } else {
-                    withPhoto.classList.add('d-none');
-                    noPhoto.classList.remove('d-none');
-                }
-            });
-
-            const emailDocs = document.getElementById('email-documents');
-            const emailPhotoWrap = document.getElementById('email-degree-photo-wrap');
-
-            function toggleEmailPhotoOption() {
-                if (!emailDocs || !emailPhotoWrap) return;
-                emailPhotoWrap.style.visibility = emailDocs.value === 'transcript' ? 'hidden' : 'visible';
-            }
-
-            emailDocs?.addEventListener('change', toggleEmailPhotoOption);
-            toggleEmailPhotoOption();
-        </script>
     @endisset
 @endsection

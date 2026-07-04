@@ -88,7 +88,6 @@ class CertificatesController extends Controller
         $student = Student::with(['department.school', 'degree_level'])->findOrFail($studentId);
         $recipient = $request->input('email');
         $documents = $request->input('documents');
-        $showPhoto = $request->boolean('include_degree_photo', true);
 
         $attachments = [];
 
@@ -101,7 +100,7 @@ class CertificatesController extends Controller
 
         if (in_array($documents, ['degree', 'both'], true)) {
             $attachments[] = [
-                'pdf' => $this->makeDegreePdf($student, $showPhoto),
+                'pdf' => $this->makeDegreePdf($student),
                 'filename' => $student->reg_number . '_degree.pdf',
             ];
         }
@@ -163,9 +162,7 @@ class CertificatesController extends Controller
         $studentId = decrypt($studentId);
         $student = Student::with(['department.school', 'degree_level'])->findOrFail($studentId);
 
-        $showPhoto = $request->query('photo', '1') !== '0';
-
-        return $this->makeDegreePdf($student, $showPhoto)->stream($student->reg_number . '_degree.pdf');
+        return $this->makeDegreePdf($student)->stream($student->reg_number . '_degree.pdf');
     }
 
     private function makeTranscriptPdf(Student $student)
@@ -180,9 +177,9 @@ class CertificatesController extends Controller
             ]);
     }
 
-    private function makeDegreePdf(Student $student, bool $showPhoto = true)
+    private function makeDegreePdf(Student $student)
     {
-        return Pdf::loadView('certificates.degree', $this->buildCertificateData($student, $showPhoto))
+        return Pdf::loadView('certificates.degree', $this->buildCertificateData($student))
             ->setPaper('a4', 'portrait')
             ->setOptions([
                 'isRemoteEnabled' => true,
@@ -192,7 +189,7 @@ class CertificatesController extends Controller
             ]);
     }
 
-    private function buildCertificateData(Student $student, bool $showPhoto = true): array
+    private function buildCertificateData(Student $student): array
     {
         $grouped = $this->getStudentCoursesFromSubmissions($student);
         $semesters = CertificateGrades::buildSemesters($grouped);
@@ -209,8 +206,8 @@ class CertificatesController extends Controller
             'faculty'          => CertificatePresenter::facultyName($student),
             'program'          => CertificatePresenter::programName($student),
             'photo_path'       => CertificatePresenter::photoPath($student),
-            'photo_data_uri'   => $showPhoto ? CertificatePresenter::photoDataUri($student) : null,
-            'show_photo'       => $showPhoto,
+            'photo_data_uri'   => CertificatePresenter::photoDataUri($student),
+            'show_photo'       => true,
             'crest_data_uri'   => CertificatePresenter::crestDataUri(),
             'serial_number'    => CertificatePresenter::serialNumber($student),
             'completion_year'  => CertificatePresenter::completionYear(),
