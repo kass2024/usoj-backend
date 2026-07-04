@@ -8,6 +8,7 @@ use App\Support\CertificateGrades;
 use App\Support\CertificatePresenter;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 
 class CertificatesController extends Controller
 {
@@ -41,9 +42,36 @@ class CertificatesController extends Controller
         $student = Student::with(['department.school', 'degree_level'])->findOrFail($studentId);
 
         $pdf = Pdf::loadView('certificates.transcript', $this->buildCertificateData($student))
-            ->setPaper('a4', 'portrait');
+            ->setPaper('a4', 'portrait')
+            ->setOptions([
+                'isRemoteEnabled' => true,
+                'isHtml5ParserEnabled' => true,
+                'dpi' => 120,
+            ]);
 
         return $pdf->stream($student->reg_number . '_transcript.pdf');
+    }
+
+    public function uploadPhoto(Request $request, $studentId)
+    {
+        $studentId = decrypt($studentId);
+
+        $request->validate([
+            'profile_img' => 'required|image|mimes:jpg,jpeg,png|max:4096',
+        ]);
+
+        $student = Student::findOrFail($studentId);
+
+        if ($student->profile_img && Storage::disk('public')->exists($student->profile_img)) {
+            Storage::disk('public')->delete($student->profile_img);
+        }
+
+        $path = $request->file('profile_img')->store('profile_images', 'public');
+        $student->update(['profile_img' => $path]);
+
+        return redirect()
+            ->back()
+            ->with('success', 'Student photo updated successfully.');
     }
 
     public function generateDegree(Request $request, $studentId)
@@ -52,7 +80,12 @@ class CertificatesController extends Controller
         $student = Student::with(['department.school', 'degree_level'])->findOrFail($studentId);
 
         $pdf = Pdf::loadView('certificates.degree', $this->buildCertificateData($student))
-            ->setPaper('a4', 'portrait');
+            ->setPaper('a4', 'portrait')
+            ->setOptions([
+                'isRemoteEnabled' => true,
+                'isHtml5ParserEnabled' => true,
+                'dpi' => 120,
+            ]);
 
         return $pdf->stream($student->reg_number . '_degree.pdf');
     }
@@ -79,6 +112,8 @@ class CertificatesController extends Controller
             'issue_date'       => CertificatePresenter::formattedDate(),
             'student_fullname' => CertificatePresenter::studentFullName($student),
             'student_name'     => CertificatePresenter::studentDisplayName($student),
+            'registrar_stamp'  => CertificatePresenter::registrarStampPath(),
+            'vc_signature'     => CertificatePresenter::vcSignaturePath(),
         ];
     }
 

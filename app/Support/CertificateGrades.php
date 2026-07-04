@@ -98,8 +98,13 @@ class CertificateGrades
                     ? round($runningCgpaNumerator / $runningCgpaUnits, 2)
                     : 0.0;
 
+                $period = trim((string) str($yearKey)->after('—')->trim());
+                if ($period === '' || $period === $yearKey) {
+                    $period = strtoupper(trim($yearKey));
+                }
+
                 $semesters[] = [
-                    'title'   => "YEAR {$yearIndex} SEMESTER {$semesterNumber} — {$yearKey}",
+                    'title'   => "YEAR {$yearIndex} SEMESTER {$semesterNumber} {$period}",
                     'courses' => $enriched,
                     'gpa'     => $gpa,
                     'cgpa'    => $cgpa,

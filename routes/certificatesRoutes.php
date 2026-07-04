@@ -13,6 +13,7 @@ Route::controller(CertificatesController::class)
     ->group(function () {
         Route::get('/', 'index')->name('index');
         Route::post('/', 'verifyRegNumber')->name('verify');
+        Route::post('/{id}/photo', 'uploadPhoto')->name('photo');
         Route::get('/{id}/transcript', 'generateTranscript')->name('transcript');
         Route::get('/{id}/degree', 'generateDegree')->name('degree');
     });

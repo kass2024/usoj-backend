@@ -16,6 +16,25 @@ class CertificatePresenter
         return public_path('images/profile.jpg');
     }
 
+    public static function photoUrl(Student $student): string
+    {
+        if ($student->profile_img) {
+            return asset('storage/' . ltrim($student->profile_img, '/'));
+        }
+
+        return asset('images/profile.jpg');
+    }
+
+    public static function registrarStampPath(): string
+    {
+        return public_path('images/usoj/degree-registrar-stamp.png');
+    }
+
+    public static function vcSignaturePath(): string
+    {
+        return public_path('images/usoj/vc-signature.png');
+    }
+
     public static function facultyName(Student $student): string
     {
         $school = optional(optional($student->department)->school)->name;
