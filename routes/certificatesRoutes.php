@@ -36,6 +36,8 @@ Route::controller(AiTranscriptStudioController::class)
         Route::get('/run', 'runRedirect')->name('run.redirect');
         Route::post('/run', 'run')->name('run');
         Route::get('/runs/{run}/progress', 'progress')->name('run.progress');
+        Route::post('/runs/{run}/cancel', 'cancel')->name('run.cancel');
+        Route::delete('/runs/{run}', 'destroy')->name('run.destroy');
         Route::get('/runs/{run}', 'showRun')->name('run.show');
     });
 

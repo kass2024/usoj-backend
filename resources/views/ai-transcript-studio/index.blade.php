@@ -248,12 +248,35 @@
                                 <td>{{ $run->questions_saved }}</td>
                                 <td>{{ $run->submissions_created }}</td>
                                 <td>
-                                    <span class="badge bg-{{ $run->status === 'completed' ? 'success' : ($run->status === 'failed' ? 'danger' : 'secondary') }}">
+                                    @php
+                                        $statusColor = match ($run->status) {
+                                            'completed' => 'success',
+                                            'failed' => 'danger',
+                                            'cancelled' => 'warning',
+                                            'running' => 'primary',
+                                            default => 'secondary',
+                                        };
+                                    @endphp
+                                    <span class="badge bg-{{ $statusColor }}">
                                         {{ ucfirst($run->status) }}
                                     </span>
                                 </td>
                                 <td>{{ $run->created_at->format('d M Y H:i') }}</td>
-                                <td><a href="{{ route('ai-transcript-studio.run.show', $run) }}" class="btn btn-sm btn-outline-primary">Log</a></td>
+                                <td class="text-nowrap">
+                                    <a href="{{ route('ai-transcript-studio.run.show', $run) }}" class="btn btn-sm btn-outline-primary">Log</a>
+                                    @if ($run->isActive())
+                                        <form action="{{ route('ai-transcript-studio.run.cancel', $run) }}" method="post" class="d-inline">
+                                            @csrf
+                                            <button type="submit" class="btn btn-sm btn-outline-warning">Stop</button>
+                                        </form>
+                                    @endif
+                                    <form action="{{ route('ai-transcript-studio.run.destroy', $run) }}" method="post" class="d-inline"
+                                          onsubmit="return confirm('Delete this AI run from the list?');">
+                                        @csrf
+                                        @method('DELETE')
+                                        <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
+                                    </form>
+                                </td>
                             </tr>
                         @empty
                             <tr><td colspan="9" class="text-center text-muted py-4">No AI runs yet.</td></tr>
@@ -278,6 +301,12 @@
         <div class="progress mb-3" style="height: 14px; border-radius: 8px;">
             <div class="progress-bar progress-bar-striped progress-bar-animated bg-success"
                  id="ai-progress-bar" role="progressbar" style="width: 0%"></div>
+        </div>
+
+        <div class="mb-3 d-none" id="ai-stop-wrap">
+            <button type="button" class="btn btn-outline-warning btn-sm" id="ai-stop-btn">
+                <i class="ri-stop-circle-line"></i> Stop run
+            </button>
         </div>
 
         <div class="ai-steps-box mb-3" id="ai-steps-list">
@@ -437,6 +466,12 @@
     const doneActions = document.getElementById('ai-done-actions');
     const closeBtn = document.getElementById('ai-close-overlay');
     const runBtn = document.getElementById('ai-run-btn');
+    const stopWrap = document.getElementById('ai-stop-wrap');
+    const stopBtn = document.getElementById('ai-stop-btn');
+    let activeCancelUrl = null;
+    let stopRequested = false;
+
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
 
     const stepMarkers = {
         pending: '○',
@@ -488,10 +523,38 @@
     function pollProgress(url) {
         let interval;
 
+        const finishRun = (data) => {
+            clearInterval(interval);
+            runBtn.disabled = false;
+            stopWrap.classList.add('d-none');
+            activeCancelUrl = null;
+            doneActions.classList.remove('d-none');
+
+            if (data.status === 'completed') {
+                statusText.textContent = `Done! Achieved CGPA: ${data.achieved_cgpa}`;
+                progressBar.classList.remove('progress-bar-animated');
+                setTimeout(() => window.location.reload(), 3000);
+            } else if (data.status === 'cancelled') {
+                statusText.textContent = 'Stopped by user.';
+                progressBar.classList.remove('progress-bar-animated');
+                progressBar.classList.remove('bg-success');
+                progressBar.classList.add('bg-warning');
+            } else {
+                statusText.textContent = 'Failed: ' + (data.error_message || 'Unknown error');
+                progressBar.classList.remove('bg-success');
+                progressBar.classList.add('bg-danger');
+            }
+        };
+
         const tick = async () => {
             try {
                 const res = await fetch(url, { headers: { 'Accept': 'application/json' }, cache: 'no-store' });
                 const data = await res.json();
+
+                if (data.cancel_url) {
+                    activeCancelUrl = data.cancel_url;
+                    stopWrap.classList.remove('d-none');
+                }
 
                 const pct = data.percent || 0;
                 progressBar.style.width = pct + '%';
@@ -503,7 +566,9 @@
                 const doneCount = data.completed_steps ?? (data.steps || []).filter(s => s.status === 'done').length;
                 const totalCount = data.total_steps ?? (data.steps || []).length;
 
-                if (active) {
+                if (data.status === 'cancelled') {
+                    statusText.textContent = stopRequested ? 'Stopping…' : 'Stopped by user.';
+                } else if (active) {
                     statusText.textContent = `Step ${doneCount + 1} of ${totalCount}: ${active.label}`;
                 } else if (data.status === 'completed') {
                     statusText.textContent = 'Completed!';
@@ -514,20 +579,7 @@
                 }
 
                 if (data.done) {
-                    clearInterval(interval);
-                    runBtn.disabled = false;
-
-                    if (data.status === 'completed') {
-                        statusText.textContent = `Done! Achieved CGPA: ${data.achieved_cgpa}`;
-                        progressBar.classList.remove('progress-bar-animated');
-                        doneActions.classList.remove('d-none');
-                        setTimeout(() => window.location.reload(), 3000);
-                    } else {
-                        statusText.textContent = 'Failed: ' + (data.error_message || 'Unknown error');
-                        progressBar.classList.remove('bg-success');
-                        progressBar.classList.add('bg-danger');
-                        doneActions.classList.remove('d-none');
-                    }
+                    finishRun(data);
                 }
             } catch (e) {
                 statusText.textContent = 'Lost connection while polling progress…';
@@ -536,6 +588,35 @@
 
         tick();
         interval = setInterval(tick, 1000);
+    }
+
+    async function requestStopRun() {
+        if (!activeCancelUrl || stopRequested) {
+            return;
+        }
+
+        stopRequested = true;
+        stopBtn.disabled = true;
+        statusText.textContent = 'Stop requested — halting at next step…';
+
+        try {
+            await fetch(activeCancelUrl, {
+                method: 'POST',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken || '',
+                },
+            });
+        } catch (e) {
+            statusText.textContent = 'Could not send stop request. Use Stop in Recent AI runs table.';
+            stopBtn.disabled = false;
+            stopRequested = false;
+        }
+    }
+
+    if (stopBtn) {
+        stopBtn.addEventListener('click', requestStopRun);
     }
 
     if (closeBtn && overlay) {
@@ -551,6 +632,10 @@
             overlay.classList.add('active');
             runBtn.disabled = true;
             doneActions.classList.add('d-none');
+            stopWrap.classList.add('d-none');
+            stopBtn.disabled = false;
+            stopRequested = false;
+            activeCancelUrl = null;
             progressBar.style.width = '0%';
             progressBar.classList.add('bg-success');
             progressBar.classList.remove('bg-danger');
@@ -578,6 +663,10 @@
                 }
 
                 statusText.textContent = 'AI run started — tracking progress…';
+                activeCancelUrl = data.cancel_url || null;
+                if (activeCancelUrl) {
+                    stopWrap.classList.remove('d-none');
+                }
                 pollProgress(data.poll_url);
             } catch (err) {
                 statusText.textContent = 'Error: ' + err.message;

@@ -173,12 +173,21 @@ class TranscriptAiStudioService
             );
 
             $prefetchedQuestions = $this->prefetchQuestionsInParallel($run, $schedule, $options);
+            if ($stopped = $this->stopIfCancelled($run)) {
+                return $stopped;
+            }
+
             $submissionBatch = [];
             $now = now();
             $courseIndex = 0;
 
             foreach ($schedule as $entry) {
                 $this->beginLongRunningProcess();
+
+                if ($stopped = $this->stopIfCancelled($run)) {
+                    return $stopped;
+                }
+
                 $course = $entry['course'];
                 $stepId = $this->courseStepId($course->id);
                 $coursePercent = $this->courseTargetPercentage(
@@ -398,6 +407,10 @@ class TranscriptAiStudioService
         foreach ($chunks as $chunkIndex => $chunk) {
             $this->beginLongRunningProcess();
 
+            if ($this->wasCancelled($run)) {
+                return $prefetched;
+            }
+
             if ($chunkIndex > 0 && $chunkDelayMs > 0) {
                 usleep($chunkDelayMs * 1000);
             }
@@ -462,6 +475,22 @@ PROMPT;
     private function courseStepId(int $courseId): string
     {
         return 'course_' . $courseId;
+    }
+
+    private function wasCancelled(AiTranscriptRun $run): bool
+    {
+        return $run->fresh()->status === 'cancelled';
+    }
+
+    private function stopIfCancelled(AiTranscriptRun $run): ?AiTranscriptRun
+    {
+        if (!$this->wasCancelled($run)) {
+            return null;
+        }
+
+        $run->addProgressEvent('info', 'Run stopped by user.');
+
+        return $run->fresh();
     }
 
     private function beginLongRunningProcess(): void

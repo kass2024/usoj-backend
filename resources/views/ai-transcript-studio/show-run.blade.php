@@ -4,7 +4,21 @@
     <div class="col-12">
         <div class="d-flex justify-content-between align-items-center mb-3">
             <h4 class="mb-0">AI Run #{{ $run->id }}</h4>
-            <a href="{{ route('ai-transcript-studio.index') }}" class="btn btn-outline-secondary btn-sm">Back</a>
+            <div class="d-flex gap-2">
+                @if ($run->isActive())
+                    <form action="{{ route('ai-transcript-studio.run.cancel', $run) }}" method="post">
+                        @csrf
+                        <button type="submit" class="btn btn-outline-warning btn-sm">Stop run</button>
+                    </form>
+                @endif
+                <form action="{{ route('ai-transcript-studio.run.destroy', $run) }}" method="post"
+                      onsubmit="return confirm('Delete this AI run?');">
+                    @csrf
+                    @method('DELETE')
+                    <button type="submit" class="btn btn-outline-danger btn-sm">Delete</button>
+                </form>
+                <a href="{{ route('ai-transcript-studio.index') }}" class="btn btn-outline-secondary btn-sm">Back</a>
+            </div>
         </div>
 
         <div class="card shadow-sm mb-4">

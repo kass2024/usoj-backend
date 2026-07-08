@@ -54,6 +54,25 @@ class AiTranscriptRun extends Model
         return $this->hasMany(AiQuestionBank::class);
     }
 
+    public function isActive(): bool
+    {
+        return in_array($this->status, ['pending', 'running'], true);
+    }
+
+    public function markCancelled(string $message = 'Cancelled by user.'): bool
+    {
+        if (!$this->isActive()) {
+            return false;
+        }
+
+        $this->update([
+            'status' => 'cancelled',
+            'error_message' => $message,
+        ]);
+
+        return true;
+    }
+
     public function appendLog(string $message): void
     {
         $log = $this->log ?? [];
@@ -179,7 +198,9 @@ class AiTranscriptRun extends Model
             'questions_saved' => $this->questions_saved,
             'submissions_created' => $this->submissions_created,
             'error_message' => $this->error_message,
-            'done' => in_array($this->status, ['completed', 'failed'], true),
+            'done' => in_array($this->status, ['completed', 'failed', 'cancelled'], true),
+            'cancel_url' => route('ai-transcript-studio.run.cancel', $this),
+            'delete_url' => route('ai-transcript-studio.run.destroy', $this),
         ];
     }
 

@@ -9,6 +9,7 @@ use App\Services\GeminiAiService;
 use App\Services\TranscriptAiStudioService;
 use App\Support\CertificateGrades;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 
 class AiTranscriptStudioController extends Controller
@@ -127,6 +128,13 @@ class AiTranscriptStudioController extends Controller
         $resolved = $studio->resolveTarget($scale, $value);
         $student = Student::with(['department', 'degree_level'])->findOrFail($data['student_id']);
 
+        AiTranscriptRun::query()
+            ->where('student_id', $student->id)
+            ->whereIn('status', ['pending', 'running'])
+            ->each(function (AiTranscriptRun $activeRun) {
+                $activeRun->markCancelled('Stopped — a new AI run was started.');
+            });
+
         $options = [
             'generate_materials' => $request->boolean('generate_materials', true),
             'generate_assessments' => $request->boolean('generate_assessments', true),
@@ -150,6 +158,7 @@ class AiTranscriptStudioController extends Controller
             return response()->json([
                 'run_id' => $run->id,
                 'poll_url' => route('ai-transcript-studio.run.progress', $run),
+                'cancel_url' => route('ai-transcript-studio.run.cancel', $run),
                 'message' => 'AI transcript generation started.',
             ]);
         }
@@ -173,6 +182,61 @@ class AiTranscriptStudioController extends Controller
         $run->load(['student.department', 'materials.course', 'questions.course', 'triggeredBy']);
 
         return view('ai-transcript-studio.show-run', compact('run'));
+    }
+
+    public function cancel(Request $request, AiTranscriptRun $run)
+    {
+        if (!$run->markCancelled()) {
+            $message = 'This run is not active (already finished or stopped).';
+
+            if ($request->expectsJson() || $request->ajax()) {
+                return response()->json(['message' => $message], 422);
+            }
+
+            return redirect()
+                ->route('ai-transcript-studio.index')
+                ->with('error', $message);
+        }
+
+        $run->addProgressEvent('info', 'Stop requested — halting at next safe step.');
+
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json([
+                'message' => 'AI run stop requested.',
+                'status' => $run->fresh()->status,
+            ]);
+        }
+
+        return redirect()
+            ->route('ai-transcript-studio.index')
+            ->with('success', 'AI run stop requested. It will halt shortly.');
+    }
+
+    public function destroy(Request $request, AiTranscriptRun $run)
+    {
+        if ($run->isActive()) {
+            $run->markCancelled('Deleted while running.');
+        }
+
+        $run->load('materials');
+
+        foreach ($run->materials as $material) {
+            if ($material->pdf_path && Storage::disk('local')->exists($material->pdf_path)) {
+                Storage::disk('local')->delete($material->pdf_path);
+            }
+        }
+
+        $run->questions()->delete();
+        $run->materials()->delete();
+        $run->delete();
+
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json(['message' => 'AI run deleted.']);
+        }
+
+        return redirect()
+            ->route('ai-transcript-studio.index')
+            ->with('success', 'AI run deleted.');
     }
 
     private function runValidationError(Request $request, string $message)
