@@ -6,18 +6,42 @@ use App\Models\ClassYear;
 use App\Models\DegreeLevel;
 use App\Models\Department;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 class WebsiteCatalogueService
 {
+    private const CACHE_MINUTES = 15;
+
+    private ?bool $pivotTableExists = null;
+
     public function getByCategory(string $category): Collection
     {
-        $rows = collect();
+        return Cache::remember(
+            "website_programmes.{$category}",
+            now()->addMinutes(self::CACHE_MINUTES),
+            fn () => $this->buildByCategory($category)
+        );
+    }
 
+    public function clearCache(): void
+    {
+        foreach (['undergraduate', 'diploma', 'short_course'] as $category) {
+            Cache::forget("website_programmes.{$category}");
+        }
+    }
+
+    private function buildByCategory(string $category): Collection
+    {
         $departments = Department::query()
             ->active()
-            ->with(['school.program'])
+            ->select(['id', 'name', 'abbr', 'slug', 'description', 'school_id', 'duration', 'mode', 'website_category'])
+            ->with([
+                'school:id,name,program_id,status',
+                'school.program:id,name,status',
+                'degreeLevels' => fn ($query) => $query->active()->select('degree_levels.id', 'degree_levels.name', 'degree_levels.slug', 'degree_levels.program_id', 'degree_levels.status'),
+            ])
             ->whereHas('school', function ($query) {
                 $query->where('status', 'active')
                     ->whereHas('program', fn ($program) => $program->where('status', 'active'));
@@ -25,19 +49,47 @@ class WebsiteCatalogueService
             ->orderBy('name')
             ->get();
 
+        if ($departments->isEmpty()) {
+            return collect();
+        }
+
+        $programIds = $departments
+            ->map(fn (Department $department) => $department->school?->program?->id)
+            ->filter()
+            ->unique()
+            ->values();
+
+        $levelsByProgram = DegreeLevel::query()
+            ->active()
+            ->select(['id', 'name', 'slug', 'program_id', 'status'])
+            ->whereIn('program_id', $programIds)
+            ->orderBy('name')
+            ->get()
+            ->groupBy('program_id');
+
+        $yearCounts = $this->yearCountsForDepartments($departments->pluck('id'));
+
+        $rows = collect();
+
         foreach ($departments as $department) {
             $program = $department->school?->program;
             if (!$program) {
                 continue;
             }
 
-            $degreeLevels = $this->degreeLevelsForDepartment($department, $program->id);
+            $degreeLevels = $this->degreeLevelsForDepartment(
+                $department,
+                (int) $program->id,
+                $levelsByProgram
+            );
 
             foreach ($degreeLevels as $level) {
                 $resolvedCategory = $this->resolveCategory($department, $level);
                 if ($resolvedCategory !== $category) {
                     continue;
                 }
+
+                $yearCount = $yearCounts->get($department->id . '-' . $level->id, 0);
 
                 $rows->push([
                     'id' => $department->id . '-' . $level->id,
@@ -47,7 +99,7 @@ class WebsiteCatalogueService
                     'program' => $program->name,
                     'school' => $department->school->name,
                     'degree_level' => $level->name,
-                    'duration' => $department->duration ?: $this->guessDuration($department, $level),
+                    'duration' => $department->duration ?: $this->guessDuration($yearCount, $level),
                     'mode' => $department->mode ?: $this->guessMode($level),
                     'category' => $resolvedCategory,
                     'slug' => $department->slug,
@@ -63,20 +115,42 @@ class WebsiteCatalogueService
         ])->values();
     }
 
-    private function degreeLevelsForDepartment(Department $department, int $programId): Collection
+    private function yearCountsForDepartments(Collection $departmentIds): Collection
     {
-        if (Schema::hasTable('department_degree_level')) {
-            $linked = $department->degreeLevels()->active()->get();
-            if ($linked->isNotEmpty()) {
-                return $linked;
-            }
+        if ($departmentIds->isEmpty()) {
+            return collect();
         }
 
-        return DegreeLevel::query()
-            ->active()
-            ->where('program_id', $programId)
-            ->orderBy('name')
-            ->get();
+        return ClassYear::query()
+            ->whereIn('department_id', $departmentIds)
+            ->select('department_id', 'degree_level_id')
+            ->selectRaw('COUNT(DISTINCT year_name) as year_count')
+            ->groupBy('department_id', 'degree_level_id')
+            ->get()
+            ->mapWithKeys(fn ($row) => [
+                $row->department_id . '-' . $row->degree_level_id => (int) $row->year_count,
+            ]);
+    }
+
+    private function degreeLevelsForDepartment(
+        Department $department,
+        int $programId,
+        Collection $levelsByProgram
+    ): Collection {
+        if ($this->pivotTableExists() && $department->relationLoaded('degreeLevels') && $department->degreeLevels->isNotEmpty()) {
+            return $department->degreeLevels;
+        }
+
+        return $levelsByProgram->get($programId, collect());
+    }
+
+    private function pivotTableExists(): bool
+    {
+        if ($this->pivotTableExists === null) {
+            $this->pivotTableExists = Schema::hasTable('department_degree_level');
+        }
+
+        return $this->pivotTableExists;
     }
 
     private function resolveCategory(Department $department, DegreeLevel $level): ?string
@@ -106,14 +180,8 @@ class WebsiteCatalogueService
         return 'undergraduate';
     }
 
-    private function guessDuration(Department $department, DegreeLevel $level): string
+    private function guessDuration(int $years, DegreeLevel $level): string
     {
-        $years = ClassYear::query()
-            ->where('department_id', $department->id)
-            ->where('degree_level_id', $level->id)
-            ->distinct('year_name')
-            ->count('year_name');
-
         if ($years > 0) {
             return $years . ' ' . Str::plural('Year', $years);
         }

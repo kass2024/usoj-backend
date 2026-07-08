@@ -29,10 +29,18 @@ Optional (admin can edit duration/mode on departments):
 ```bash
 cd ~/e-learning.uosj.ac.ug   # adjust to your Laravel path
 php artisan migrate --force
+php artisan cache:clear
 php artisan route:clear
 php artisan config:clear
-php artisan cache:clear
 php artisan optimize:clear
+```
+
+Programmes are cached for 15 minutes on the server. After editing departments, cache clears automatically. To refresh manually:
+
+```bash
+php artisan cache:forget website_programmes.undergraduate
+php artisan cache:forget website_programmes.diploma
+php artisan cache:forget website_programmes.short_course
 ```
 
 ## 3. Verify API
@@ -64,4 +72,4 @@ VITE_API_BASE_URL=https://e-learning.uosj.ac.ug/api
 
 ## Temporary fallback
 
-Until step 1–2 are done, the website build will try the legacy endpoints (`/api/schools`, `/api/departments`, `/api/levels`) if `/api/website-programmes` returns 404. Rebuild and upload `dist/` after pulling the latest frontend code.
+The website no longer makes dozens of slow fallback API calls. It uses one fast endpoint with an 8-second timeout and shows a clear error if the API is missing or unreachable.

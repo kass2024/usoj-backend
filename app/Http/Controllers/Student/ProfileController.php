@@ -42,12 +42,10 @@ class ProfileController extends Controller
     try {
         // Handle file upload
         if ($request->hasFile('profile_img')) {
-            // Delete old photo if exists
-            if ($student->profile_img && Storage::exists('public/' . $student->profile_img)) {
-                Storage::delete('public/' . $student->profile_img);
+            if ($student->profile_img && Storage::disk('public')->exists($student->profile_img)) {
+                Storage::disk('public')->delete($student->profile_img);
             }
 
-            // Store new photo
             $path = $request->file('profile_img')->store('profile_images', 'public');
             $student->profile_img = $path;
         }

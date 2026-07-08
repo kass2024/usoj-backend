@@ -98,12 +98,20 @@
                     </div>
                 </div>
 
+                <div class="d-flex gap-2 flex-wrap align-items-center mb-2">
+                    <span class="badge bg-secondary">Manual</span>
+                    <span class="small text-muted">Uses marks already in the system — no AI changes.</span>
+                </div>
                 <div class="d-flex gap-2 flex-wrap align-items-center mb-4">
                     <a target="_blank" href="{{ route('certificates.transcript', encrypt($student->id)) }}"
-                       class="btn btn-primary">Generate Transcript</a>
+                       class="btn btn-primary">
+                        <i class="ri-file-pdf-line"></i> Generate Transcript (Manual)
+                    </a>
 
                     <a target="_blank" href="{{ route('certificates.degree', encrypt($student->id)) }}"
-                       class="btn btn-success">Generate Degree</a>
+                       class="btn btn-success">
+                        <i class="ri-award-line"></i> Generate Degree (Manual)
+                    </a>
 
                     @if ($externalTranscript)
                         <a target="_blank"
@@ -130,7 +138,21 @@
                     @endif
                 </div>
 
-                <div class="border rounded p-3 bg-light">
+                <div class="border-top pt-3 mt-2">
+                    <div class="d-flex gap-2 flex-wrap align-items-center mb-2">
+                        <span class="badge bg-warning text-dark">AI</span>
+                        <span class="small text-muted">Auto-fills 4 years of marks via Gemini + bot. Clears old marks first.</span>
+                    </div>
+                    <form action="{{ route('ai-transcript-studio.lookup') }}" method="post" class="d-inline">
+                        @csrf
+                        <input type="hidden" name="reg_number" value="{{ $student->reg_number }}">
+                        <button type="submit" class="btn btn-warning">
+                            <i class="ri-robot-2-line"></i> Open AI Transcript Studio
+                        </button>
+                    </form>
+                </div>
+
+                <div class="border rounded p-3 bg-light mt-3">
                     <h6 class="mb-3">Email documents</h6>
                     <form action="{{ route('certificates.email', encrypt($student->id)) }}" method="post">
                         @csrf

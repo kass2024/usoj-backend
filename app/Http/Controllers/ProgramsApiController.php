@@ -31,18 +31,21 @@ class ProgramsApiController extends Controller
         if (!$category || !in_array($category, $allowed, true)) {
             return response()->json([
                 'message' => 'A valid category is required: undergraduate, diploma, or short_course.',
+                'data' => [],
             ], 422);
         }
 
         $programmes = $catalogue->getByCategory($category);
 
-        return response()->json([
-            'data' => $programmes,
-            'meta' => [
-                'total' => $programmes->count(),
-                'category' => $category,
-                'source' => 'programs_schools_departments_degree_levels',
-            ],
-        ]);
+        return response()
+            ->json([
+                'data' => $programmes,
+                'meta' => [
+                    'total' => $programmes->count(),
+                    'category' => $category,
+                    'source' => 'programs_schools_departments_degree_levels',
+                ],
+            ])
+            ->header('Cache-Control', 'public, max-age=300');
     }
 }

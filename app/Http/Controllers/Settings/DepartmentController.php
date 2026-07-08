@@ -4,11 +4,16 @@ namespace App\Http\Controllers\Settings;
 
 use App\Http\Controllers\Controller;
 use App\Models\Department;
+use App\Services\WebsiteCatalogueService;
 use Illuminate\Support\Str;
 use Illuminate\Http\Request;
 
 class DepartmentController extends Controller
 {
+    public function __construct(private WebsiteCatalogueService $catalogue)
+    {
+    }
+
     /**
      * Display a listing of the resource.
      */
@@ -45,6 +50,7 @@ class DepartmentController extends Controller
 
         try {
             Department::create($request->all());
+            $this->catalogue->clearCache();
             return back()->with('message', 'Department added successfully');
         } catch (\Throwable $th) {
             return back()->with('error', $th->getMessage());
@@ -87,6 +93,7 @@ class DepartmentController extends Controller
         $request->merge(['slug' => Str::slug($request->name)]);
         try {
             $department->update($request->all());
+            $this->catalogue->clearCache();
             return back()->with('message', 'Department updated successfully');
         } catch (\Throwable $th) {
             return back()->with('error', $th->getMessage());
@@ -101,6 +108,7 @@ class DepartmentController extends Controller
         // Delete the department
         try {
             $department->delete();
+            $this->catalogue->clearCache();
             return back()->with('message', 'Department deleted successfully');
         } catch (\Throwable $th) {
             return back()->with('error', $th->getMessage());

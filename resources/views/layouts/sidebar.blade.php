@@ -286,6 +286,12 @@
                     </x-nav-link>
                 </li>
                 <li class="nav-item">
+                    <x-nav-link class="nav-link menu-link" :href="route('ai-transcript-studio.index')"
+                                :active="request()->routeIs('ai-transcript-studio.*')">
+                        <i class="ri-robot-2-line"></i> <span data-key="t-ai-studio">AI Transcript Studio</span>
+                    </x-nav-link>
+                </li>
+                <li class="nav-item">
                     <x-nav-link class="nav-link menu-link" :href="route('document-links.index')"
                                 :active="request()->routeIs('document-links.*')">
                         <i class="ri-link-m"></i> <span data-key="t-doc-links">USJ Upload Links</span>

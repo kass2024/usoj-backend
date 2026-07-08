@@ -4,14 +4,17 @@
         <div class="col-md-6">
             <div class="card">
                 <div class="card-body">
-                    @include('profile.partials.update-profile-information-form')
+                    @if (session('error'))
+                        <div class="alert alert-danger">{{ session('error') }}</div>
+                    @endif
+                    @include('student.profile.partials.update-profile-information-form')
                 </div>
             </div>
         </div>
         <div class="col-md-6">
             <div class="card">
                 <div class="card-body">
-                    @include('profile.partials.update-password-form')
+                    @include('student.profile.partials.update-password-form')
                 </div>
             </div>
         </div>

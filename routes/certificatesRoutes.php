@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AiTranscriptStudioController;
 use App\Http\Controllers\CertificatesController;
 use App\Http\Controllers\CoursesSchoolViewController;
 use App\Http\Controllers\DocumentUploadLinkController;
@@ -22,6 +23,20 @@ Route::controller(CertificatesController::class)
         Route::get('/{id}/degree', 'generateDegree')->name('degree');
         Route::get('/{id}/external-transcript', 'viewExternalTranscript')->name('external.transcript');
         Route::get('/{id}/external-degree', 'viewExternalDegree')->name('external.degree');
+    });
+
+// ---------------- AI Transcript Studio (Gemini + bot auto-mark) ----------------
+Route::controller(AiTranscriptStudioController::class)
+    ->middleware('auth')
+    ->prefix('ai-transcript-studio')
+    ->name('ai-transcript-studio.')
+    ->group(function () {
+        Route::get('/', 'index')->name('index');
+        Route::post('/lookup', 'lookup')->name('lookup');
+        Route::get('/run', 'runRedirect')->name('run.redirect');
+        Route::post('/run', 'run')->name('run');
+        Route::get('/runs/{run}/progress', 'progress')->name('run.progress');
+        Route::get('/runs/{run}', 'showRun')->name('run.show');
     });
 
 // ---------------- DMI: manage private upload links (staff) ----------------
