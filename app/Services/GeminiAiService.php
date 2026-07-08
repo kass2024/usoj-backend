@@ -16,31 +16,37 @@ class GeminiAiService
         return !empty(config('gemini.api_key'));
     }
 
+    public function usesFallbackOnly(): bool
+    {
+        return (bool) config('gemini.fallback_only', false);
+    }
+
     public function parallelLimit(): int
     {
-        return max(1, min(16, (int) config('gemini.parallel_requests', 8)));
+        if (config('gemini.sequential_mode', false)) {
+            return 1;
+        }
+
+        return max(1, min(16, (int) config('gemini.parallel_requests', 2)));
     }
 
     public function generateText(string $prompt, ?string $system = null, ?int $maxTokens = null): string
     {
-        $response = $this->sendRequest($prompt, $system, false, $maxTokens);
+        $response = $this->sendRequestWithRetry($prompt, $system, false, $maxTokens);
 
         return $this->extractText($response);
     }
 
     public function generateJson(string $prompt, ?string $system = null, ?int $maxTokens = null): array
     {
-        $response = $this->sendRequest($prompt, $system, true, $maxTokens);
+        $response = $this->sendRequestWithRetry($prompt, $system, true, $maxTokens);
         $raw = $this->extractText($response);
 
         return $this->decodeJson($raw);
     }
 
     /**
-     * Run multiple Gemini JSON requests in parallel (Http::pool).
-     *
-     * @param  array<string, array{prompt: string, system?: string|null}>  $requests
-     * @return array<string, array|string> decoded JSON or error message string
+     * @return array<string, array|string>
      */
     public function poolGenerateJson(array $requests, ?int $maxTokens = null): array
     {
@@ -52,10 +58,47 @@ class GeminiAiService
             return [];
         }
 
+        if (config('gemini.sequential_mode', false)) {
+            return $this->sequentialGenerateJson($requests, $maxTokens);
+        }
+
+        return $this->parallelGenerateJson($requests, $maxTokens);
+    }
+
+    /**
+     * @param  array<string, array{prompt: string, system?: string|null}>  $requests
+     * @return array<string, array|string>
+     */
+    private function sequentialGenerateJson(array $requests, ?int $maxTokens): array
+    {
+        $out = [];
+        $delayMs = max(0, (int) config('gemini.request_delay_ms', 500));
+
+        foreach ($requests as $key => $req) {
+            $out[$key] = $this->tryGenerateJson(
+                $req['prompt'],
+                $req['system'] ?? null,
+                $maxTokens
+            );
+
+            if ($delayMs > 0) {
+                usleep($delayMs * 1000);
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  array<string, array{prompt: string, system?: string|null}>  $requests
+     * @return array<string, array|string>
+     */
+    private function parallelGenerateJson(array $requests, ?int $maxTokens): array
+    {
         $model = config('gemini.model');
         $url = rtrim(config('gemini.base_url'), '/') . "/models/{$model}:generateContent";
         $timeout = (int) config('gemini.timeout');
-        $connectTimeout = (int) config('gemini.connect_timeout', 15);
+        $connectTimeout = (int) config('gemini.connect_timeout', 30);
         $tokens = $maxTokens ?? (int) config('gemini.question_max_tokens', 2048);
 
         try {
@@ -74,7 +117,7 @@ class GeminiAiService
                 }
             });
         } catch (Throwable $e) {
-            $message = 'Gemini pool error: ' . $e->getMessage();
+            $message = $this->sanitizeError('Gemini pool error: ' . $e->getMessage());
             $out = [];
             foreach (array_keys($requests) as $key) {
                 $out[$key] = $message;
@@ -84,41 +127,123 @@ class GeminiAiService
         }
 
         $out = [];
+        $retryQueue = [];
+
         foreach ($requests as $key => $req) {
-            $response = $responses[$key] ?? null;
-
-            if ($response instanceof Throwable) {
-                $out[$key] = 'Gemini connection error: ' . $response->getMessage();
-                continue;
+            $parsed = $this->parsePoolResponse($responses[$key] ?? null);
+            if (is_array($parsed)) {
+                $out[$key] = $parsed;
+            } else {
+                $out[$key] = $parsed;
+                if ($this->isRetryableError((string) $parsed)) {
+                    $retryQueue[$key] = $req;
+                }
             }
+        }
 
-            if (!$response instanceof Response) {
-                $out[$key] = 'Gemini API error: No response received';
-                continue;
-            }
+        if ($retryQueue !== []) {
+            $delayMs = max(0, (int) config('gemini.request_delay_ms', 500));
+            foreach ($retryQueue as $key => $req) {
+                $out[$key] = $this->tryGenerateJson(
+                    $req['prompt'],
+                    $req['system'] ?? null,
+                    $maxTokens
+                );
 
-            if ($response->failed()) {
-                $out[$key] = 'Gemini API error: ' . $response->body();
-                continue;
-            }
-
-            try {
-                $raw = $this->extractText($response);
-                $out[$key] = $this->decodeJson($raw);
-            } catch (RuntimeException $e) {
-                $out[$key] = $e->getMessage();
+                if ($delayMs > 0) {
+                    usleep($delayMs * 1000);
+                }
             }
         }
 
         return $out;
     }
 
-    private function sendRequest(string $prompt, ?string $system, bool $jsonMode, ?int $maxTokens): Response
+    /**
+     * @return array|string
+     */
+    private function tryGenerateJson(string $prompt, ?string $system = null, ?int $maxTokens = null): array|string
     {
+        $attempts = max(1, (int) config('gemini.retry_attempts', 3));
+        $lastError = 'Unknown Gemini error';
+
+        for ($attempt = 1; $attempt <= $attempts; $attempt++) {
+            try {
+                return $this->generateJson($prompt, $system, $maxTokens);
+            } catch (RuntimeException $e) {
+                $lastError = $this->sanitizeError($e->getMessage());
+
+                if ($attempt < $attempts && $this->isRetryableError($lastError)) {
+                    usleep(max(1, (int) config('gemini.retry_delay_ms', 1500)) * 1000 * $attempt);
+                    continue;
+                }
+
+                break;
+            }
+        }
+
+        return $lastError;
+    }
+
+    /**
+     * @return array|string
+     */
+    private function parsePoolResponse(mixed $response): array|string
+    {
+        if ($response instanceof Throwable) {
+            return $this->sanitizeError('Gemini connection error: ' . $response->getMessage());
+        }
+
+        if (!$response instanceof Response) {
+            return 'Gemini API error: No response received';
+        }
+
+        if ($response->failed()) {
+            return $this->sanitizeError('Gemini API error: ' . $response->body());
+        }
+
+        try {
+            $raw = $this->extractText($response);
+
+            return $this->decodeJson($raw);
+        } catch (RuntimeException $e) {
+            return $this->sanitizeError($e->getMessage());
+        }
+    }
+
+    private function sendRequestWithRetry(
+        string $prompt,
+        ?string $system,
+        bool $jsonMode,
+        ?int $maxTokens
+    ): Response {
         if (!$this->isConfigured()) {
             throw new RuntimeException('Gemini API key is not configured. Set GOOGLE_AI_API_KEY in .env');
         }
 
+        $attempts = max(1, (int) config('gemini.retry_attempts', 3));
+        $lastError = 'Unknown Gemini error';
+
+        for ($attempt = 1; $attempt <= $attempts; $attempt++) {
+            try {
+                return $this->sendRequest($prompt, $system, $jsonMode, $maxTokens);
+            } catch (RuntimeException $e) {
+                $lastError = $this->sanitizeError($e->getMessage());
+
+                if ($attempt < $attempts && $this->isRetryableError($lastError)) {
+                    usleep(max(1, (int) config('gemini.retry_delay_ms', 1500)) * 1000 * $attempt);
+                    continue;
+                }
+
+                throw new RuntimeException($lastError, 0, $e);
+            }
+        }
+
+        throw new RuntimeException($lastError);
+    }
+
+    private function sendRequest(string $prompt, ?string $system, bool $jsonMode, ?int $maxTokens): Response
+    {
         $model = config('gemini.model');
         $url = rtrim(config('gemini.base_url'), '/') . "/models/{$model}:generateContent";
         $tokens = $maxTokens ?? ($jsonMode
@@ -126,7 +251,7 @@ class GeminiAiService
             : (int) config('gemini.max_output_tokens', 8192));
 
         try {
-            $response = Http::connectTimeout((int) config('gemini.connect_timeout', 15))
+            $response = Http::connectTimeout((int) config('gemini.connect_timeout', 30))
                 ->timeout((int) config('gemini.timeout'))
                 ->withQueryParameters(['key' => config('gemini.api_key')])
                 ->post($url, $this->buildPayload($prompt, $system, $jsonMode, $tokens));
@@ -168,13 +293,25 @@ class GeminiAiService
 
     private function extractText(Response $response): string
     {
-        $text = data_get($response->json(), 'candidates.0.content.parts.0.text');
+        $parts = data_get($response->json(), 'candidates.0.content.parts', []);
+        $text = '';
 
-        if (!$text) {
-            throw new RuntimeException('Gemini returned an empty response.');
+        foreach ($parts as $part) {
+            if (!empty($part['text'])) {
+                $text .= $part['text'];
+            }
         }
 
-        return trim($text);
+        $text = trim($text);
+
+        if ($text === '') {
+            $finishReason = data_get($response->json(), 'candidates.0.finishReason');
+            throw new RuntimeException(
+                'Gemini returned an empty response' . ($finishReason ? " ({$finishReason})" : '') . '.'
+            );
+        }
+
+        return $text;
     }
 
     private function decodeJson(string $raw): array
@@ -192,6 +329,14 @@ class GeminiAiService
             return $decoded;
         }
 
+        $repaired = preg_replace('/,\s*([}\]])/', '$1', $raw);
+        if (is_string($repaired)) {
+            $decoded = json_decode($repaired, true);
+            if (is_array($decoded)) {
+                return $decoded;
+            }
+        }
+
         if (preg_match('/\{.*\}/s', $raw, $m)) {
             $decoded = json_decode($m[0], true);
             if (is_array($decoded)) {
@@ -207,5 +352,40 @@ class GeminiAiService
         }
 
         throw new RuntimeException('Gemini did not return valid JSON.');
+    }
+
+    private function isRetryableError(string $message): bool
+    {
+        $needles = [
+            'cURL error 28',
+            'Resolving timed out',
+            'Connection timed out',
+            'Could not resolve host',
+            'Connection refused',
+            'SSL connection',
+            'Empty reply from server',
+            'Recv failure',
+            'Gemini connection error',
+        ];
+
+        foreach ($needles as $needle) {
+            if (stripos($message, $needle) !== false) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function sanitizeError(string $message): string
+    {
+        $message = preg_replace('/key=[^&\s]+/i', 'key=[REDACTED]', $message) ?? $message;
+        $message = preg_replace('/\?key=[^\s]+/i', '?key=[REDACTED]', $message) ?? $message;
+
+        if (strlen($message) > 280) {
+            $message = substr($message, 0, 277) . '...';
+        }
+
+        return trim($message);
     }
 }

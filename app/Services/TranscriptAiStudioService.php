@@ -331,6 +331,24 @@ class TranscriptAiStudioService
             return [];
         }
 
+        if ($this->gemini->usesFallbackOnly()) {
+            $run->addProgressEvent(
+                'info',
+                'cPanel safe mode: skipping Gemini API — using built-in questions for all courses.'
+            );
+
+            $prefetched = [];
+            foreach ($schedule as $entry) {
+                $course = $entry['course'];
+                if ($this->courseHasQuestionBank($course->id)) {
+                    continue;
+                }
+                $prefetched[(int) $course->id] = $this->fallbackCombinedQuestions($course);
+            }
+
+            return $prefetched;
+        }
+
         $requests = [];
 
         foreach ($schedule as $entry) {
@@ -350,16 +368,23 @@ class TranscriptAiStudioService
             return [];
         }
 
+        $mode = config('gemini.sequential_mode', false) ? 'sequential' : 'parallel';
         $run->addProgressEvent(
             'info',
-            'Prefetching questions for ' . count($requests) . ' course(s) via parallel Gemini (' . $this->gemini->parallelLimit() . ' at a time).'
+            'Prefetching questions for ' . count($requests) . " course(s) via {$mode} Gemini ("
+            . $this->gemini->parallelLimit() . ' at a time).'
         );
 
         $prefetched = [];
         $chunks = array_chunk($requests, $this->gemini->parallelLimit(), true);
+        $chunkDelayMs = max(0, (int) config('gemini.request_delay_ms', 500));
 
-        foreach ($chunks as $chunk) {
+        foreach ($chunks as $chunkIndex => $chunk) {
             $this->beginLongRunningProcess();
+
+            if ($chunkIndex > 0 && $chunkDelayMs > 0) {
+                usleep($chunkDelayMs * 1000);
+            }
 
             try {
                 $results = $this->gemini->poolGenerateJson($chunk);
