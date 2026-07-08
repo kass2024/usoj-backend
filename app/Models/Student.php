@@ -30,6 +30,21 @@ class Student extends Authenticatable
         'profile_img'
     ];
 
+    public function externalDocuments()
+    {
+        return $this->hasMany(StudentExternalDocument::class);
+    }
+
+    public function externalTranscript()
+    {
+        return $this->hasOne(StudentExternalDocument::class)->where('type', 'transcript');
+    }
+
+    public function externalDegree()
+    {
+        return $this->hasOne(StudentExternalDocument::class)->where('type', 'degree');
+    }
+
     public function department()
     {
         return $this->belongsTo(Department::class);

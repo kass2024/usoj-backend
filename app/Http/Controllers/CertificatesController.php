@@ -16,12 +16,24 @@ class CertificatesController extends Controller
     public function index(Request $request)
     {
         $student = null;
+        $externalTranscript = null;
+        $externalDegree = null;
 
         if ($studentId = session('certificate_student_id')) {
-            $student = Student::with('department')->find($studentId);
+            $student = Student::with(['department', 'externalTranscript', 'externalDegree'])
+                ->find($studentId);
+
+            if ($student) {
+                $externalTranscript = $student->externalTranscript;
+                $externalDegree = $student->externalDegree;
+            }
         }
 
-        return view('certificates.index', compact('student'));
+        return view('certificates.index', compact(
+            'student',
+            'externalTranscript',
+            'externalDegree'
+        ));
     }
 
     public function verifyRegNumber(Request $request)
@@ -34,7 +46,7 @@ class CertificatesController extends Controller
 
         $regNumber = trim($request->input('regNumber'));
 
-        $student = Student::with('department')
+        $student = Student::with(['department', 'externalTranscript', 'externalDegree'])
             ->whereRaw('UPPER(reg_number) = ?', [strtoupper($regNumber)])
             ->first();
 
@@ -163,6 +175,41 @@ class CertificatesController extends Controller
         $student = Student::with(['department.school', 'degree_level'])->findOrFail($studentId);
 
         return $this->makeDegreePdf($student)->stream($student->reg_number . '_degree.pdf');
+    }
+
+    public function viewExternalTranscript($studentId)
+    {
+        return $this->streamExternalDocument($studentId, 'transcript');
+    }
+
+    public function viewExternalDegree($studentId)
+    {
+        return $this->streamExternalDocument($studentId, 'degree');
+    }
+
+    private function streamExternalDocument($studentId, string $type)
+    {
+        $studentId = decrypt($studentId);
+        $student = Student::findOrFail($studentId);
+
+        $document = $student->externalDocuments()
+            ->where('type', $type)
+            ->first();
+
+        if (!$document || !$document->existsOnDisk()) {
+            return redirect()
+                ->route('certificates.index')
+                ->with('certificate_student_id', $student->id)
+                ->with('error', 'No external ' . $type . ' has been uploaded for this student.');
+        }
+
+        $absolute = Storage::disk('public')->path($document->path);
+        $downloadName = $document->original_name
+            ?: ($student->reg_number . '_external_' . $type . '.pdf');
+
+        return response()->file($absolute, [
+            'Content-Disposition' => 'inline; filename="' . $downloadName . '"',
+        ]);
     }
 
     private function makeTranscriptPdf(Student $student)

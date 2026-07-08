@@ -284,7 +284,12 @@
                                 :active="request()->routeIs('certificates.index')">
                         <i class="ri-dashboard-2-line"></i> <span data-key="t-dashboards">Generate Academic Docs</span>
                     </x-nav-link>
-
+                </li>
+                <li class="nav-item">
+                    <x-nav-link class="nav-link menu-link" :href="route('document-links.index')"
+                                :active="request()->routeIs('document-links.*')">
+                        <i class="ri-link-m"></i> <span data-key="t-doc-links">USJ Upload Links</span>
+                    </x-nav-link>
                 </li>
                 
                 

@@ -98,14 +98,36 @@
                     </div>
                 </div>
 
-                <div class="d-flex gap-3 flex-wrap align-items-center mb-4">
-                    <a target="_blank" href="{{ route('certificates.transcript', encrypt($student->id)) }}">
-                        <button type="button" class="btn btn-primary">Generate Transcript</button>
-                    </a>
+                <div class="d-flex gap-2 flex-wrap align-items-center mb-4">
+                    <a target="_blank" href="{{ route('certificates.transcript', encrypt($student->id)) }}"
+                       class="btn btn-primary">Generate Transcript</a>
 
-                    <a target="_blank" href="{{ route('certificates.degree', encrypt($student->id)) }}">
-                        <button type="button" class="btn btn-success">Generate Degree</button>
-                    </a>
+                    <a target="_blank" href="{{ route('certificates.degree', encrypt($student->id)) }}"
+                       class="btn btn-success">Generate Degree</a>
+
+                    @if ($externalTranscript)
+                        <a target="_blank"
+                           href="{{ route('certificates.external.transcript', encrypt($student->id)) }}"
+                           class="btn btn-outline-primary">
+                            View Uploaded Transcript
+                        </a>
+                    @else
+                        <button type="button" class="btn btn-outline-secondary" disabled title="No external transcript uploaded">
+                            View Uploaded Transcript
+                        </button>
+                    @endif
+
+                    @if ($externalDegree)
+                        <a target="_blank"
+                           href="{{ route('certificates.external.degree', encrypt($student->id)) }}"
+                           class="btn btn-outline-success">
+                            View Uploaded Degree
+                        </a>
+                    @else
+                        <button type="button" class="btn btn-outline-secondary" disabled title="No external degree uploaded">
+                            View Uploaded Degree
+                        </button>
+                    @endif
                 </div>
 
                 <div class="border rounded p-3 bg-light">
