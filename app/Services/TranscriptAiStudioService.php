@@ -62,24 +62,145 @@ class TranscriptAiStudioService
         return ['percentage' => $percentage, 'cgpa' => $cgpa];
     }
 
-    public function marksForPercentage(float $percentage, string $type): int
+    private function marksForPercentage(float $percentage, string $type, int $courseId = 0): int
     {
         $max = in_array($type, ['assignment', 'quiz'], true) ? 30 : 40;
+        $jitter = $courseId > 0 ? ((crc32("{$courseId}:{$type}") % 7) - 3) * 0.15 : 0;
+        $adjusted = min(100, max(0, $percentage + $jitter));
 
-        return (int) round(($percentage / 100) * $max);
+        return (int) round(($adjusted / 100) * $max);
     }
 
     public function courseTargetPercentage(
         float $basePercent,
         int $studentId,
         int $courseId,
+        int $courseIndex,
+        array $plan = []
+    ): float {
+        if (isset($plan[$courseId])) {
+            return (float) $plan[$courseId];
+        }
+
+        return $this->fallbackCoursePercentage($basePercent, $studentId, $courseId, $courseIndex);
+    }
+
+    /**
+     * Build per-course percentages with varied GP/GD that average to target CGPA.
+     *
+     * @return array<int, float> course_id => percentage
+     */
+    public function buildCoursePercentagePlan(float $targetCgpa, Collection $schedule, int $studentId): array
+    {
+        $entries = [];
+        $palette = CertificateGrades::gradePointPalette();
+
+        foreach ($schedule as $index => $entry) {
+            $course = $entry['course'];
+            $entries[] = [
+                'course_id' => (int) $course->id,
+                'credits' => CertificateGrades::resolveCourseCredits($course),
+                'index' => $index,
+            ];
+        }
+
+        if ($entries === []) {
+            return [];
+        }
+
+        $gps = [];
+        foreach ($entries as $entry) {
+            $hash = crc32("{$studentId}:{$entry['course_id']}:{$entry['index']}");
+            $gps[] = $palette[$hash % count($palette)];
+        }
+
+        $gps = $this->calibrateGpListToTarget(
+            $gps,
+            array_column($entries, 'credits'),
+            max(2.0, min(5.0, round($targetCgpa, 2)))
+        );
+
+        $plan = [];
+        foreach ($entries as $i => $entry) {
+            $plan[$entry['course_id']] = CertificateGrades::percentageForGp($gps[$i]);
+        }
+
+        return $plan;
+    }
+
+    private function fallbackCoursePercentage(
+        float $basePercent,
+        int $studentId,
+        int $courseId,
         int $courseIndex
     ): float {
         $hash = crc32("{$studentId}:{$courseId}:{$courseIndex}");
-        $spread = (($hash % 27) - 13) * 0.37;
-        $indexBias = (($courseIndex % 7) - 3) * 0.21;
+        $spread = (($hash % 27) - 13) * 0.55;
+        $indexBias = (($courseIndex % 9) - 4) * 0.35;
 
         return round(min(95, max(45, $basePercent + $spread + $indexBias)), 2);
+    }
+
+    /**
+     * @param  array<float>  $gps
+     * @param  array<int>  $credits
+     * @return array<float>
+     */
+    private function calibrateGpListToTarget(array $gps, array $credits, float $targetCgpa): array
+    {
+        for ($iter = 0; $iter < 80; $iter++) {
+            $avg = $this->weightedGpAverage($gps, $credits);
+            $diff = round($targetCgpa - $avg, 2);
+
+            if (abs($diff) < 0.03) {
+                break;
+            }
+
+            foreach ($gps as $i => $gp) {
+                $direction = ($i % 2 === 0) ? 1 : -1;
+                $gps[$i] = CertificateGrades::snapGp($gp + ($diff * 0.35 * $direction));
+            }
+        }
+
+        return $gps;
+    }
+
+    /**
+     * @param  array<float>  $gps
+     * @param  array<int>  $credits
+     */
+    private function weightedGpAverage(array $gps, array $credits): float
+    {
+        $weighted = 0.0;
+        $units = 0;
+
+        foreach ($gps as $i => $gp) {
+            $cu = max(1, (int) ($credits[$i] ?? 3));
+            $weighted += $gp * $cu;
+            $units += $cu;
+        }
+
+        return $units > 0 ? round($weighted / $units, 2) : 0.0;
+    }
+
+    /**
+     * @param  array<int, float>  $plan
+     */
+    public function previewCgpaWithPlan(Student $student, array $plan): float
+    {
+        $schedule = $this->buildFourYearProgramSchedule($student);
+        $gps = [];
+        $credits = [];
+
+        foreach ($schedule as $index => $entry) {
+            $course = $entry['course'];
+            $percent = $plan[$course->id] ?? 76.0;
+            $grades = CertificateGrades::fromPercentage($percent);
+            $gps[] = $grades['gp'];
+            $credits[] = CertificateGrades::resolveCourseCredits($course);
+        }
+
+        return $this->weightedGpAverage($gps, $credits);
     }
 
     /**
@@ -129,6 +250,7 @@ class TranscriptAiStudioService
             $student = Student::with(['department', 'degree_level'])->findOrFail($run->student_id);
             $options = $run->options ?? [];
             $targetPercentage = (float) $run->target_percentage;
+            $targetCgpa = (float) ($run->target_cgpa ?? $this->cgpaFromPercentage($targetPercentage));
 
             $schedule = $this->buildFourYearProgramSchedule($student);
 
@@ -137,6 +259,12 @@ class TranscriptAiStudioService
             }
 
             $this->initCourseProgressSteps($run, $schedule, $options);
+
+            $coursePercentagePlan = $this->buildCoursePercentagePlan(
+                $targetCgpa,
+                $schedule,
+                $student->id
+            );
 
             $run->setStepStatus('init', 'active', 'Initializing AI transcript run');
             $run->setStepStatus('init', 'done');
@@ -194,7 +322,8 @@ class TranscriptAiStudioService
                     $targetPercentage,
                     $student->id,
                     $course->id,
-                    $courseIndex
+                    $courseIndex,
+                    $coursePercentagePlan
                 );
 
                 $run->setStepStatus(
@@ -973,8 +1102,9 @@ PROMPT;
         float $coursePercent,
         $now
     ): array {
-        $module->load(['assignments.questions', 'quizzes.questions', 'exams.questions']);
+        $module->load(['assignments.questions', 'quizzes.questions', 'exams.questions', 'course']);
         $rows = [];
+        $courseId = (int) ($module->course_id ?? 0);
 
         foreach ($module->assignments as $assessment) {
             $rows[] = $this->botSubmissionRow(
@@ -985,7 +1115,8 @@ PROMPT;
                 null,
                 $coursePercent,
                 $assessment->questions,
-                $now
+                $now,
+                $courseId
             );
         }
 
@@ -998,7 +1129,8 @@ PROMPT;
                 null,
                 $coursePercent,
                 $assessment->questions,
-                $now
+                $now,
+                $courseId
             );
         }
 
@@ -1011,7 +1143,8 @@ PROMPT;
                 $assessment->id,
                 $coursePercent,
                 $assessment->questions,
-                $now
+                $now,
+                $courseId
             );
         }
 
@@ -1026,9 +1159,10 @@ PROMPT;
         ?int $examId,
         float $coursePercent,
         $questions,
-        $now
+        $now,
+        int $courseId = 0
     ): array {
-        $marksObtained = $this->marksForPercentage($coursePercent, $type);
+        $marksObtained = $this->marksForPercentage($coursePercent, $type, $courseId);
 
         return [
             'student_id' => $studentId,

@@ -346,7 +346,7 @@ class CertificatesController extends Controller
 
             $marksOver20 = $max > 0 ? round(($total / $max) * 20, 2) : 0.0;
             $percentage = $max > 0 ? round(($total / $max) * 100, 2) : 0.0;
-            $credits = (int) ($course->credits ?? 0);
+            $credits = CertificateGrades::resolveCourseCredits($course);
             $creditMax = round($credits * $marksOver20, 2);
 
             $courseKey = $course->code ?: ('course_' . $module->id);

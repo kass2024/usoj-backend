@@ -73,6 +73,10 @@
         }
 
         .semester-grid { width: 100%; }
+        .semester-grid > tbody > tr.year-divider td {
+            border-top: 2px solid #0066B3;
+            padding-top: 2.5mm;
+        }
         .semester-grid td { width: 50%; vertical-align: top; padding: 0 1.5mm 2mm 1.5mm; }
 
         .semester-title {
@@ -249,8 +253,16 @@
 
         <div class="results-wrap">
             <table class="semester-grid">
+                @php $prevYear = null; @endphp
                 @foreach (array_chunk($semesters, 2) as $row)
-                    <tr>
+                    @php
+                        $rowYear = $row[0]['year_index'] ?? null;
+                        $isNewYear = $prevYear !== null && $rowYear !== null && $rowYear !== $prevYear;
+                        if ($rowYear !== null) {
+                            $prevYear = $rowYear;
+                        }
+                    @endphp
+                    <tr class="{{ $isNewYear ? 'year-divider' : '' }}">
                         @foreach ($row as $colIndex => $semester)
                             <td>
                                 <p class="semester-title">{{ $semester['title'] }}</p>
@@ -270,8 +282,8 @@
                                                 <td>{{ $course['code'] }}</td>
                                                 <td class="left">{{ strtoupper($course['name']) }}</td>
                                                 <td>{{ $course['credits'] }}</td>
-                                                <td>{{ number_format($course['gp'], 1) }}</td>
-                                                <td>{{ $course['gd'] }}</td>
+                                                <td>{{ number_format($course['gp'], 2) }}</td>
+                                                <td><strong>{{ $course['gd'] }}</strong></td>
                                             </tr>
                                         @endforeach
                                     </tbody>

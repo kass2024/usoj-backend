@@ -43,10 +43,11 @@
                         <tr><td>80–100%</td><td>5.0</td><td>A</td></tr>
                         <tr><td>75–79.9%</td><td>4.5</td><td>B+</td></tr>
                         <tr><td>70–74.9%</td><td>4.0</td><td>B</td></tr>
-                        <tr><td>65–69.9%</td><td>3.5</td><td>B</td></tr>
+                        <tr><td>65–69.9%</td><td>3.5</td><td>B-</td></tr>
                         <tr><td>60–64.9%</td><td>3.0</td><td>C+</td></tr>
                         <tr><td>55–59.9%</td><td>2.5</td><td>C</td></tr>
-                        <tr><td>45–54.9%</td><td>1.5</td><td>C</td></tr>
+                        <tr><td>50–54.9%</td><td>2.0</td><td>C-</td></tr>
+                        <tr><td>45–49.9%</td><td>1.5</td><td>D+</td></tr>
                         <tr><td>40–44.9%</td><td>1.0</td><td>D+</td></tr>
                         <tr><td>35–39.9%</td><td>0.5</td><td>D</td></tr>
                         <tr><td>Below 35%</td><td>0</td><td>F</td></tr>
