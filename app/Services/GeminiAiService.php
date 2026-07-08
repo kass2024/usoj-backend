@@ -2,10 +2,12 @@
 
 namespace App\Services;
 
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Pool;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use RuntimeException;
+use Throwable;
 
 class GeminiAiService
 {
@@ -56,28 +58,47 @@ class GeminiAiService
         $connectTimeout = (int) config('gemini.connect_timeout', 15);
         $tokens = $maxTokens ?? (int) config('gemini.question_max_tokens', 2048);
 
-        $responses = Http::pool(function (Pool $pool) use ($requests, $url, $timeout, $connectTimeout, $tokens) {
-            foreach ($requests as $key => $req) {
-                $pool->as($key)
-                    ->connectTimeout($connectTimeout)
-                    ->timeout($timeout)
-                    ->withQueryParameters(['key' => config('gemini.api_key')])
-                    ->post($url, $this->buildPayload(
-                        $req['prompt'],
-                        $req['system'] ?? null,
-                        true,
-                        $tokens
-                    ));
+        try {
+            $responses = Http::pool(function (Pool $pool) use ($requests, $url, $timeout, $connectTimeout, $tokens) {
+                foreach ($requests as $key => $req) {
+                    $pool->as($key)
+                        ->connectTimeout($connectTimeout)
+                        ->timeout($timeout)
+                        ->withQueryParameters(['key' => config('gemini.api_key')])
+                        ->post($url, $this->buildPayload(
+                            $req['prompt'],
+                            $req['system'] ?? null,
+                            true,
+                            $tokens
+                        ));
+                }
+            });
+        } catch (Throwable $e) {
+            $message = 'Gemini pool error: ' . $e->getMessage();
+            $out = [];
+            foreach (array_keys($requests) as $key) {
+                $out[$key] = $message;
             }
-        });
+
+            return $out;
+        }
 
         $out = [];
         foreach ($requests as $key => $req) {
-            /** @var Response $response */
             $response = $responses[$key] ?? null;
-            if (!$response || !$response->successful()) {
-                $body = $response ? $response->body() : 'No response';
-                $out[$key] = 'Gemini API error: ' . $body;
+
+            if ($response instanceof Throwable) {
+                $out[$key] = 'Gemini connection error: ' . $response->getMessage();
+                continue;
+            }
+
+            if (!$response instanceof Response) {
+                $out[$key] = 'Gemini API error: No response received';
+                continue;
+            }
+
+            if ($response->failed()) {
+                $out[$key] = 'Gemini API error: ' . $response->body();
                 continue;
             }
 
@@ -104,12 +125,16 @@ class GeminiAiService
             ? (int) config('gemini.question_max_tokens', 2048)
             : (int) config('gemini.max_output_tokens', 8192));
 
-        $response = Http::connectTimeout((int) config('gemini.connect_timeout', 15))
-            ->timeout((int) config('gemini.timeout'))
-            ->withQueryParameters(['key' => config('gemini.api_key')])
-            ->post($url, $this->buildPayload($prompt, $system, $jsonMode, $tokens));
+        try {
+            $response = Http::connectTimeout((int) config('gemini.connect_timeout', 15))
+                ->timeout((int) config('gemini.timeout'))
+                ->withQueryParameters(['key' => config('gemini.api_key')])
+                ->post($url, $this->buildPayload($prompt, $system, $jsonMode, $tokens));
+        } catch (ConnectionException $e) {
+            throw new RuntimeException('Gemini connection error: ' . $e->getMessage(), 0, $e);
+        }
 
-        if (!$response->successful()) {
+        if ($response->failed()) {
             throw new RuntimeException('Gemini API error: ' . $response->body());
         }
 
@@ -125,7 +150,7 @@ class GeminiAiService
         $parts[] = ['text' => $prompt];
 
         $generationConfig = [
-            'temperature' => 0.3,
+            'temperature' => 0.2,
             'maxOutputTokens' => $maxTokens,
         ];
 
@@ -154,18 +179,33 @@ class GeminiAiService
 
     private function decodeJson(string $raw): array
     {
+        $raw = trim($raw);
+
         if (preg_match('/```json\s*(.*?)\s*```/s', $raw, $m)) {
-            $raw = $m[1];
+            $raw = trim($m[1]);
         } elseif (preg_match('/```\s*(.*?)\s*```/s', $raw, $m)) {
-            $raw = $m[1];
+            $raw = trim($m[1]);
         }
 
-        $decoded = json_decode(trim($raw), true);
-
-        if (!is_array($decoded)) {
-            throw new RuntimeException('Gemini did not return valid JSON.');
+        $decoded = json_decode($raw, true);
+        if (is_array($decoded)) {
+            return $decoded;
         }
 
-        return $decoded;
+        if (preg_match('/\{.*\}/s', $raw, $m)) {
+            $decoded = json_decode($m[0], true);
+            if (is_array($decoded)) {
+                return $decoded;
+            }
+        }
+
+        if (preg_match('/\[.*\]/s', $raw, $m)) {
+            $decoded = json_decode($m[0], true);
+            if (is_array($decoded)) {
+                return $decoded;
+            }
+        }
+
+        throw new RuntimeException('Gemini did not return valid JSON.');
     }
 }

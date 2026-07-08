@@ -360,11 +360,20 @@ class TranscriptAiStudioService
 
         foreach ($chunks as $chunk) {
             $this->beginLongRunningProcess();
-            $results = $this->gemini->poolGenerateJson($chunk);
+
+            try {
+                $results = $this->gemini->poolGenerateJson($chunk);
+            } catch (Throwable $e) {
+                $results = [];
+                foreach (array_keys($chunk) as $courseId) {
+                    $results[$courseId] = 'Gemini pool error: ' . $e->getMessage();
+                }
+            }
 
             foreach ($results as $courseId => $result) {
-                if (is_string($result)) {
-                    $run->addProgressEvent('error', "Course {$courseId}: {$result}", 'Using fallback questions');
+                if (!is_array($result)) {
+                    $message = is_string($result) ? $result : 'Invalid question payload from Gemini';
+                    $run->addProgressEvent('error', "Course {$courseId}: {$message}", 'Using fallback questions');
                     $entry = $schedule->first(fn ($e) => (string) $e['course']->id === (string) $courseId);
                     $course = $entry['course'] ?? null;
                     $prefetched[(int) $courseId] = $course
