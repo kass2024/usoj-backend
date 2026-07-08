@@ -127,7 +127,7 @@
                                     <input class="form-check-input" type="checkbox" name="fast_mode" value="1" id="opt_fast" checked>
                                     <label class="form-check-label" for="opt_fast">
                                         <strong>Fast mode</strong><br>
-                                        <small class="text-muted">Parallel AI, skip slow PDFs</small>
+                                        <small class="text-muted">Skip Gemini API wait — built-in questions, no PDFs</small>
                                     </label>
                                 </div>
                             </div>
@@ -321,10 +321,27 @@
     }
     .ai-step-item {
         display: flex; align-items: flex-start; gap: 10px;
-        padding: 6px 4px; font-size: 0.85rem; border-bottom: 1px solid #eee;
+        padding: 8px 10px; font-size: 0.85rem; border-bottom: 1px solid #eee;
+        border-radius: 8px; margin-bottom: 4px;
+        transition: background .2s, border-color .2s;
     }
-    .ai-step-item:last-child { border-bottom: none; }
-    .ai-step-icon { width: 20px; flex-shrink: 0; text-align: center; margin-top: 1px; }
+    .ai-step-item:last-child { border-bottom: none; margin-bottom: 0; }
+    .ai-step-item--pending { color: #6c757d; background: #fff; }
+    .ai-step-item--active {
+        color: #0f5132; background: #d1e7dd; border: 1px solid #a3cfbb;
+        font-weight: 600;
+    }
+    .ai-step-item--done { color: #198754; background: #f0fff4; }
+    .ai-step-item--warning { color: #b45309; background: #fff7ed; }
+    .ai-step-icon {
+        width: 22px; height: 22px; flex-shrink: 0;
+        display: flex; align-items: center; justify-content: center;
+        border-radius: 50%; font-size: 14px; font-weight: 700;
+    }
+    .ai-step-icon--pending { color: #adb5bd; border: 2px solid #dee2e6; background: #fff; }
+    .ai-step-icon--active { color: #fff; background: #198754; border: 2px solid #198754; }
+    .ai-step-icon--done { color: #fff; background: #198754; border: 2px solid #198754; }
+    .ai-step-icon--warning { color: #fff; background: #fd7e14; border: 2px solid #fd7e14; }
     .ai-step-pending { color: #adb5bd; }
     .ai-step-active { color: #007a33; font-weight: 600; }
     .ai-step-done { color: #198754; }
@@ -421,21 +438,39 @@
     const closeBtn = document.getElementById('ai-close-overlay');
     const runBtn = document.getElementById('ai-run-btn');
 
-    const stepIcons = {
-        pending: '<i class="ri-checkbox-blank-circle-line ai-step-pending"></i>',
-        active: '<i class="ri-loader-4-line ai-step-active" style="animation:spin .9s linear infinite"></i>',
-        done: '<i class="ri-checkbox-circle-fill ai-step-done"></i>',
-        warning: '<i class="ri-error-warning-fill ai-step-warning"></i>',
+    const stepMarkers = {
+        pending: '○',
+        active: '…',
+        done: '✓',
+        warning: '!',
     };
 
     function renderSteps(steps) {
         if (!steps || !steps.length) return;
-        stepsList.innerHTML = steps.map(step => `
-            <div class="ai-step-item">
-                <div class="ai-step-icon">${stepIcons[step.status] || stepIcons.pending}</div>
-                <div class="${step.status === 'active' ? 'ai-step-active' : ''}">${step.label}</div>
-            </div>
-        `).join('');
+
+        stepsList.innerHTML = steps.map((step, index) => {
+            const status = step.status || 'pending';
+            const rowClass = `ai-step-item ai-step-item--${status}`;
+            const iconClass = `ai-step-icon ai-step-icon--${status}`;
+            const marker = stepMarkers[status] || stepMarkers.pending;
+            const icon = status === 'active'
+                ? '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>'
+                : marker;
+
+            return `
+            <div class="${rowClass}" data-step-id="${step.id}" data-step-status="${status}">
+                <div class="${iconClass}" aria-label="${status}">${icon}</div>
+                <div class="flex-grow-1">
+                    <div class="small text-muted">Step ${index + 1}</div>
+                    <div>${step.label}</div>
+                </div>
+            </div>`;
+        }).join('');
+
+        const activeEl = stepsList.querySelector('[data-step-status="active"]');
+        if (activeEl) {
+            activeEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
     }
 
     function renderEvents(events) {
@@ -451,9 +486,11 @@
     }
 
     function pollProgress(url) {
-        const interval = setInterval(async () => {
+        let interval;
+
+        const tick = async () => {
             try {
-                const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+                const res = await fetch(url, { headers: { 'Accept': 'application/json' }, cache: 'no-store' });
                 const data = await res.json();
 
                 const pct = data.percent || 0;
@@ -463,7 +500,18 @@
                 renderEvents(data.events);
 
                 const active = (data.steps || []).find(s => s.status === 'active');
-                statusText.textContent = active ? active.label : (data.status === 'completed' ? 'Completed!' : 'Processing…');
+                const doneCount = data.completed_steps ?? (data.steps || []).filter(s => s.status === 'done').length;
+                const totalCount = data.total_steps ?? (data.steps || []).length;
+
+                if (active) {
+                    statusText.textContent = `Step ${doneCount + 1} of ${totalCount}: ${active.label}`;
+                } else if (data.status === 'completed') {
+                    statusText.textContent = 'Completed!';
+                } else if (totalCount > 0) {
+                    statusText.textContent = `Processing… ${doneCount}/${totalCount} steps done`;
+                } else {
+                    statusText.textContent = 'Processing…';
+                }
 
                 if (data.done) {
                     clearInterval(interval);
@@ -484,7 +532,10 @@
             } catch (e) {
                 statusText.textContent = 'Lost connection while polling progress…';
             }
-        }, 1500);
+        };
+
+        tick();
+        interval = setInterval(tick, 1000);
     }
 
     if (closeBtn && overlay) {

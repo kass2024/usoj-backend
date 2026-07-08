@@ -58,8 +58,7 @@ class AiTranscriptRun extends Model
     {
         $log = $this->log ?? [];
         $log[] = ['time' => now()->toDateTimeString(), 'message' => $message];
-        $this->log = $log;
-        $this->save();
+        $this->update(['log' => $log]);
     }
 
     public function initProgress(array $steps): void
@@ -79,6 +78,7 @@ class AiTranscriptRun extends Model
 
     public function setStepStatus(string $stepId, string $status, ?string $label = null): void
     {
+        $this->refresh();
         $progress = $this->progress ?? ['steps' => [], 'events' => [], 'percent' => 0];
         $found = false;
 
@@ -108,12 +108,12 @@ class AiTranscriptRun extends Model
         }
 
         $progress['percent'] = $this->calculatePercent($progress['steps']);
-        $this->progress = $progress;
-        $this->save();
+        $this->update(['progress' => $progress]);
     }
 
     public function addProgressEvent(string $type, string $message, ?string $fallback = null): void
     {
+        $this->refresh();
         $progress = $this->progress ?? ['steps' => [], 'events' => [], 'percent' => 0];
         $progress['events'][] = [
             'time' => now()->toDateTimeString(),
@@ -121,8 +121,7 @@ class AiTranscriptRun extends Model
             'message' => $message,
             'fallback' => $fallback,
         ];
-        $this->progress = $progress;
-        $this->save();
+        $this->update(['progress' => $progress]);
 
         $logLine = $message;
         if ($fallback) {
@@ -131,18 +130,48 @@ class AiTranscriptRun extends Model
         $this->appendLog($logLine);
     }
 
+    public function setPrefetchProgress(int $completed, int $total): void
+    {
+        $this->refresh();
+        $progress = $this->progress ?? ['steps' => [], 'events' => [], 'percent' => 0];
+        $label = "Prefetching Gemini questions ({$completed}/{$total})";
+
+        foreach ($progress['steps'] as &$step) {
+            if ($step['id'] === 'prefetch_questions') {
+                $step['label'] = $label;
+                $step['status'] = $completed >= $total ? 'done' : 'active';
+            }
+        }
+        unset($step);
+
+        $progress['current_step'] = 'prefetch_questions';
+        $progress['prefetch'] = ['completed' => $completed, 'total' => $total];
+        $progress['percent'] = $this->calculatePercent($progress['steps'], $completed, $total);
+        $this->update(['progress' => $progress]);
+    }
+
     public function progressPayload(): array
     {
         $this->refresh();
         $progress = $this->progress ?? ['percent' => 0, 'steps' => [], 'events' => []];
+
+        $steps = $progress['steps'] ?? [];
+        $completedSteps = 0;
+        foreach ($steps as $step) {
+            if (($step['status'] ?? '') === 'done') {
+                $completedSteps++;
+            }
+        }
 
         return [
             'id' => $this->id,
             'status' => $this->status,
             'percent' => (int) ($progress['percent'] ?? 0),
             'current_step' => $progress['current_step'] ?? null,
-            'steps' => $progress['steps'] ?? [],
+            'steps' => $steps,
             'events' => $progress['events'] ?? [],
+            'completed_steps' => $completedSteps,
+            'total_steps' => count($steps),
             'achieved_cgpa' => $this->achieved_cgpa,
             'target_percentage' => $this->target_percentage,
             'courses_processed' => $this->courses_processed,
@@ -154,17 +183,22 @@ class AiTranscriptRun extends Model
         ];
     }
 
-    private function calculatePercent(array $steps): int
+    private function calculatePercent(array $steps, ?int $prefetchCompleted = null, ?int $prefetchTotal = null): int
     {
         if (empty($steps)) {
             return 0;
         }
 
         $total = count($steps);
-        $done = 0;
+        $done = 0.0;
 
         foreach ($steps as $step) {
             $status = $step['status'] ?? 'pending';
+            if ($step['id'] === 'prefetch_questions' && $prefetchTotal !== null && $prefetchTotal > 0) {
+                $done += min(1, $prefetchCompleted / $prefetchTotal);
+                continue;
+            }
+
             if ($status === 'done') {
                 $done++;
             } elseif ($status === 'active') {

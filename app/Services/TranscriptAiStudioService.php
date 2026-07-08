@@ -120,7 +120,6 @@ class TranscriptAiStudioService
         $this->beginLongRunningProcess();
 
         $run->update(['status' => 'running']);
-        $run->setStepStatus('init', 'active', 'Initializing AI transcript run');
 
         try {
             if (!$this->gemini->isConfigured()) {
@@ -131,6 +130,15 @@ class TranscriptAiStudioService
             $options = $run->options ?? [];
             $targetPercentage = (float) $run->target_percentage;
 
+            $schedule = $this->buildFourYearProgramSchedule($student);
+
+            if ($schedule->isEmpty()) {
+                throw new \RuntimeException('No courses found for this student program/department.');
+            }
+
+            $this->initCourseProgressSteps($run, $schedule, $options);
+
+            $run->setStepStatus('init', 'active', 'Initializing AI transcript run');
             $run->setStepStatus('init', 'done');
             $run->setStepStatus('clear_marks', 'active', 'Clearing old marks from database');
 
@@ -139,18 +147,10 @@ class TranscriptAiStudioService
             $run->setStepStatus('clear_marks', 'done');
 
             $run->setStepStatus('schedule', 'active', 'Building 4-year program schedule');
-            $schedule = $this->buildFourYearProgramSchedule($student);
-
-            if ($schedule->isEmpty()) {
-                throw new \RuntimeException('No courses found for this student program/department.');
-            }
-
             $run->appendLog(
                 '4-year program schedule: ' . $schedule->count() . ' course(s). Target: ' . $targetPercentage . '%.'
             );
             $run->setStepStatus('schedule', 'done');
-
-            $this->initCourseProgressSteps($run, $schedule, $options);
 
             $lecturerId = $this->resolveLecturerId($student);
             $classYears = $this->ensureFourClassYears($student);
@@ -168,8 +168,8 @@ class TranscriptAiStudioService
             $run->addProgressEvent(
                 'info',
                 ($options['fast_mode'] ?? true)
-                    ? 'Fast mode: parallel Gemini + question bank reuse enabled.'
-                    : 'Full mode: sequential Gemini generation.'
+                    ? 'Fast mode: skipping Gemini API — built-in questions + question bank reuse.'
+                    : 'Full mode: Gemini generates course questions.'
             );
 
             $prefetchedQuestions = $this->prefetchQuestionsInParallel($run, $schedule, $options);
@@ -298,6 +298,10 @@ class TranscriptAiStudioService
             ['id' => 'schedule', 'label' => 'Build 4-year schedule'],
         ];
 
+        if ($this->needsGeminiPrefetch($options)) {
+            $steps[] = ['id' => 'prefetch_questions', 'label' => 'Prefetch Gemini questions'];
+        }
+
         foreach ($schedule as $entry) {
             $course = $entry['course'];
             $steps[] = [
@@ -322,6 +326,13 @@ class TranscriptAiStudioService
         }
     }
 
+    private function needsGeminiPrefetch(array $options): bool
+    {
+        return ($options['generate_assessments'] ?? true)
+            && !($options['fast_mode'] ?? true)
+            && !$this->gemini->usesFallbackOnly();
+    }
+
     private function prefetchQuestionsInParallel(
         AiTranscriptRun $run,
         Collection $schedule,
@@ -331,11 +342,12 @@ class TranscriptAiStudioService
             return [];
         }
 
-        if ($this->gemini->usesFallbackOnly()) {
-            $run->addProgressEvent(
-                'info',
-                'cPanel safe mode: skipping Gemini API — using built-in questions for all courses.'
-            );
+        if (($options['fast_mode'] ?? true) || $this->gemini->usesFallbackOnly()) {
+            $message = $this->gemini->usesFallbackOnly()
+                ? 'cPanel safe mode: skipping Gemini API — using built-in questions for all courses.'
+                : 'Fast mode: using built-in questions (no Gemini wait for 63 courses).';
+
+            $run->addProgressEvent('info', $message);
 
             $prefetched = [];
             foreach ($schedule as $entry) {
@@ -378,6 +390,10 @@ class TranscriptAiStudioService
         $prefetched = [];
         $chunks = array_chunk($requests, $this->gemini->parallelLimit(), true);
         $chunkDelayMs = max(0, (int) config('gemini.request_delay_ms', 500));
+        $totalRequests = count($requests);
+        $completedRequests = 0;
+
+        $run->setPrefetchProgress(0, $totalRequests);
 
         foreach ($chunks as $chunkIndex => $chunk) {
             $this->beginLongRunningProcess();
@@ -408,6 +424,9 @@ class TranscriptAiStudioService
                 }
                 $prefetched[(int) $courseId] = $result;
             }
+
+            $completedRequests += count($chunk);
+            $run->setPrefetchProgress($completedRequests, $totalRequests);
         }
 
         return $prefetched;
