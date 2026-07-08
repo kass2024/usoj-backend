@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 class Department extends Model
 {
     use HasFactory;
-    protected $fillable = ['name', 'abbr', 'slug', 'description', 'school_id', 'status'];
+    protected $fillable = ['name', 'abbr', 'slug', 'description', 'school_id', 'status', 'duration', 'mode', 'website_category'];
     public function school()
     {
         return $this->belongsTo(School::class);

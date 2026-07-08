@@ -23,4 +23,11 @@ Route::controller(ProgramsApiController::class)->group(function () {
     Route::get('/schools/{programId}', 'getSchools');
     Route::get('/departments/{schoolId}', 'getDepartments');
     Route::get('/levels/{departmentId}', 'getLevels');
+    Route::get('/website-programmes', 'getWebsiteProgrammes');
+});
+
+Route::get('/public-programs', function () {
+    return response()->json([
+        'data' => \App\Models\Program::query()->active()->orderBy('name')->get(['id', 'name', 'slug', 'description', 'status']),
+    ]);
 });

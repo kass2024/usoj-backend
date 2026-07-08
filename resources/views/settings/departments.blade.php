@@ -57,6 +57,9 @@
                                                     data-status="{{ $department->status }}"
                                                     data-abbr="{{ $department->abbr }}"
                                                     data-description="{{ $department->description }}"
+                                                    data-duration="{{ $department->duration }}"
+                                                    data-mode="{{ $department->mode }}"
+                                                    data-website-category="{{ $department->website_category }}"
                                                     data-action="{{ route('settings.departments.update', ['department' => $department->id]) }}"
                                                     class="text-primary d-inline-block edit-btn">
                                                     <i class="ri-pencil-fill fs-16"></i>
@@ -112,6 +115,27 @@
                                         @enderror
                                     </div>
 
+                                    <div class="row">
+                                        <div class="col-md-4 mb-3">
+                                            <label for="duration" class="form-label">Duration (website)</label>
+                                            <input type="text" name="duration" value="{{ old('duration') }}" id="duration"
+                                                class="form-control" placeholder="e.g. 3 Years" />
+                                        </div>
+                                        <div class="col-md-4 mb-3">
+                                            <label for="mode" class="form-label">Mode (website)</label>
+                                            <input type="text" name="mode" value="{{ old('mode') }}" id="mode"
+                                                class="form-control" placeholder="e.g. Fulltime & Weekend" />
+                                        </div>
+                                        <div class="col-md-4 mb-3">
+                                            <label for="website-category" class="form-label">Website category</label>
+                                            <select class="form-select" name="website_category" id="website-category">
+                                                <option value="">Auto (from degree level)</option>
+                                                <option value="undergraduate">Undergraduate</option>
+                                                <option value="diploma">Diploma</option>
+                                                <option value="short_course">Short course</option>
+                                            </select>
+                                        </div>
+                                    </div>
 
                                     <div class="mb-3">
                                         <label for="status-field" class="form-label">Status</label>
@@ -220,6 +244,9 @@
                 $('#name').val($(this).data('name'));
                 $('#abbr').val($(this).data('abbr'));
                 $('#description').val($(this).data('description'));
+                $('#duration').val($(this).data('duration') || '');
+                $('#mode').val($(this).data('mode') || '');
+                $('#website-category').val($(this).data('website-category') || '');
                 $('#status-field').val($(this).data('status'));
 
             });

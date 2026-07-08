@@ -37,6 +37,9 @@ class DepartmentController extends Controller
             'description' => 'nullable',
             'school_id' => 'required',
             'status' => 'required',
+            'duration' => 'nullable|string|max:50',
+            'mode' => 'nullable|string|max:100',
+            'website_category' => 'nullable|in:undergraduate,diploma,short_course',
         ]);
         $request->merge(['slug' => Str::slug($request->name)]);
 
@@ -77,6 +80,9 @@ class DepartmentController extends Controller
             'description' => 'nullable',
             'school_id' => 'required',
             'status' => 'required',
+            'duration' => 'nullable|string|max:50',
+            'mode' => 'nullable|string|max:100',
+            'website_category' => 'nullable|in:undergraduate,diploma,short_course',
         ]);
         $request->merge(['slug' => Str::slug($request->name)]);
         try {
