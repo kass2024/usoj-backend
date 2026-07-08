@@ -34,6 +34,38 @@ php artisan view:cache
 chmod -R 775 storage bootstrap/cache
 ```
 
+### 2b. cPanel Gemini settings (required for AI Transcript Studio)
+
+Shared hosting often cannot resolve DNS for many parallel Google API calls.
+Add these to `.env` on the server (do **not** overwrite your existing `.env` — only append):
+
+```
+# Recommended for cPanel — one request at a time with retries
+GEMINI_SEQUENTIAL_MODE=true
+GEMINI_PARALLEL_REQUESTS=1
+GEMINI_CONNECT_TIMEOUT=30
+GEMINI_TIMEOUT=60
+GEMINI_RETRY_ATTEMPTS=3
+GEMINI_REQUEST_DELAY_MS=750
+
+# If DNS still fails, skip Gemini entirely (transcript still works with built-in questions):
+# GEMINI_FALLBACK_ONLY=true
+```
+
+Then:
+
+```bash
+php artisan config:clear && php artisan config:cache
+```
+
+Test DNS from cPanel terminal:
+
+```bash
+curl -I --max-time 15 https://generativelanguage.googleapis.com
+```
+
+If that times out, contact your host or use `GEMINI_FALLBACK_ONLY=true`.
+
 ### 3. PHP version
 
 cPanel → **Select PHP Version** → choose **PHP 8.1** or **8.2** for this domain.
