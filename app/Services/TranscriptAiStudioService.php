@@ -18,6 +18,7 @@ use App\Models\Student;
 use App\Models\Submission;
 use App\Models\User;
 use App\Support\CertificateGrades;
+use App\Support\ProgramDuration;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
@@ -28,8 +29,6 @@ use Throwable;
 
 class TranscriptAiStudioService
 {
-    private const PROGRAM_YEARS = 4;
-
     public function __construct(
         private readonly GeminiAiService $gemini,
     ) {}
@@ -65,32 +64,16 @@ class TranscriptAiStudioService
     private function marksForPercentage(float $percentage, string $type, int $courseId = 0): int
     {
         $max = in_array($type, ['assignment', 'quiz'], true) ? 30 : 40;
-        $jitter = $courseId > 0 ? ((crc32("{$courseId}:{$type}") % 7) - 3) * 0.15 : 0;
-        $adjusted = min(100, max(0, $percentage + $jitter));
 
-        return (int) round(($adjusted / 100) * $max);
-    }
-
-    public function courseTargetPercentage(
-        float $basePercent,
-        int $studentId,
-        int $courseId,
-        int $courseIndex,
-        array $plan = []
-    ): float {
-        if (isset($plan[$courseId])) {
-            return (float) $plan[$courseId];
-        }
-
-        return $this->fallbackCoursePercentage($basePercent, $studentId, $courseId, $courseIndex);
+        return (int) round(($percentage / 100) * $max);
     }
 
     /**
-     * Build per-course percentages with varied GP/GD that average to target CGPA.
+     * Build per-course marks with varied GP/GD that average to the target CGPA.
      *
-     * @return array<int, float> course_id => percentage
+     * @return array<int, array{gp: float, percentage: float, marks: array{assignment: int, quiz: int, exam: int}}>
      */
-    public function buildCoursePercentagePlan(float $targetCgpa, Collection $schedule, int $studentId): array
+    public function buildCourseGradePlan(float $targetCgpa, Collection $schedule, int $studentId): array
     {
         $entries = [];
         $palette = CertificateGrades::gradePointPalette();
@@ -114,7 +97,7 @@ class TranscriptAiStudioService
             $gps[] = $palette[$hash % count($palette)];
         }
 
-        $gps = $this->calibrateGpListToTarget(
+        $gps = $this->calibrateGpListToExactTarget(
             $gps,
             array_column($entries, 'credits'),
             max(2.0, min(5.0, round($targetCgpa, 2)))
@@ -122,10 +105,48 @@ class TranscriptAiStudioService
 
         $plan = [];
         foreach ($entries as $i => $entry) {
-            $plan[$entry['course_id']] = CertificateGrades::percentageForGp($gps[$i]);
+            $split = CertificateGrades::marksSplitForGp($gps[$i]);
+            $plan[$entry['course_id']] = [
+                'gp' => $split['gp'],
+                'percentage' => $split['percentage'],
+                'marks' => [
+                    'assignment' => $split['assignment'],
+                    'quiz' => $split['quiz'],
+                    'exam' => $split['exam'],
+                ],
+            ];
         }
 
         return $plan;
+    }
+
+    /** @deprecated Use buildCourseGradePlan */
+    public function buildCoursePercentagePlan(float $targetCgpa, Collection $schedule, int $studentId): array
+    {
+        $plan = [];
+        foreach ($this->buildCourseGradePlan($targetCgpa, $schedule, $studentId) as $courseId => $entry) {
+            $plan[$courseId] = $entry['percentage'];
+        }
+
+        return $plan;
+    }
+
+    public function courseTargetPercentage(
+        float $basePercent,
+        int $studentId,
+        int $courseId,
+        int $courseIndex,
+        array $plan = []
+    ): float {
+        if (isset($plan[$courseId]['percentage'])) {
+            return (float) $plan[$courseId]['percentage'];
+        }
+
+        if (isset($plan[$courseId]) && is_numeric($plan[$courseId])) {
+            return (float) $plan[$courseId];
+        }
+
+        return $this->fallbackCoursePercentage($basePercent, $studentId, $courseId, $courseIndex);
     }
 
     private function fallbackCoursePercentage(
@@ -146,23 +167,75 @@ class TranscriptAiStudioService
      * @param  array<int>  $credits
      * @return array<float>
      */
-    private function calibrateGpListToTarget(array $gps, array $credits, float $targetCgpa): array
+    private function calibrateGpListToExactTarget(array $gps, array $credits, float $targetCgpa): array
     {
-        for ($iter = 0; $iter < 80; $iter++) {
-            $avg = $this->weightedGpAverage($gps, $credits);
-            $diff = round($targetCgpa - $avg, 2);
+        $steps = CertificateGrades::gpSteps();
+        $targetCgpa = round($targetCgpa, 2);
 
-            if (abs($diff) < 0.03) {
+        for ($iter = 0; $iter < 3000; $iter++) {
+            $current = $this->weightedGpAverageFromMarks($gps, $credits);
+
+            if (round($current, 2) === $targetCgpa) {
                 break;
             }
 
+            $diff = $targetCgpa - $current;
+            $improved = false;
+
             foreach ($gps as $i => $gp) {
-                $direction = ($i % 2 === 0) ? 1 : -1;
-                $gps[$i] = CertificateGrades::snapGp($gp + ($diff * 0.35 * $direction));
+                $stepIdx = array_search($gp, $steps, true);
+                if ($stepIdx === false) {
+                    continue;
+                }
+
+                $candidates = [];
+                if ($diff > 0 && $stepIdx > 0) {
+                    $candidates[] = $steps[$stepIdx - 1];
+                }
+                if ($diff < 0 && $stepIdx < count($steps) - 1) {
+                    $candidates[] = $steps[$stepIdx + 1];
+                }
+
+                foreach ($candidates as $newGp) {
+                    $trial = $gps;
+                    $trial[$i] = $newGp;
+                    $trialAvg = $this->weightedGpAverageFromMarks($trial, $credits);
+                    $oldErr = abs($current - $targetCgpa);
+                    $newErr = abs($trialAvg - $targetCgpa);
+
+                    if ($newErr + 0.0001 < $oldErr) {
+                        $gps = $trial;
+                        $improved = true;
+                        break 2;
+                    }
+                }
+            }
+
+            if (!$improved) {
+                break;
             }
         }
 
         return $gps;
+    }
+
+    /**
+     * @param  array<float>  $gps
+     * @param  array<int>  $credits
+     */
+    private function weightedGpAverageFromMarks(array $gps, array $credits): float
+    {
+        $weighted = 0.0;
+        $units = 0;
+
+        foreach ($gps as $i => $gp) {
+            $cu = max(1, (int) ($credits[$i] ?? 3));
+            $resolvedGp = CertificateGrades::marksSplitForGp($gp)['gp'];
+            $weighted += $resolvedGp * $cu;
+            $units += $cu;
+        }
+
+        return $units > 0 ? round($weighted / $units, 2) : 0.0;
     }
 
     /**
@@ -184,11 +257,146 @@ class TranscriptAiStudioService
     }
 
     /**
+     * @param  array<int, array{gp: float, percentage: float, marks: array}>  $gradePlan
+     */
+    public function previewCgpaFromGradePlan(Collection $schedule, array $gradePlan): float
+    {
+        $gps = [];
+        $credits = [];
+
+        foreach ($schedule as $entry) {
+            $course = $entry['course'];
+            $plan = $gradePlan[$course->id] ?? null;
+            $gps[] = $plan['gp'] ?? CertificateGrades::fromPercentage($plan['percentage'] ?? 76)['gp'];
+            $credits[] = CertificateGrades::resolveCourseCredits($course);
+        }
+
+        return $this->weightedGpAverage($gps, $credits);
+    }
+
+    /**
+     * @param  array<int, array{gp: float, percentage: float, marks: array}>  $gradePlan
+     */
+    private function rebalanceSubmissionsToTargetCgpa(
+        Student $student,
+        float $targetCgpa,
+        Collection $schedule,
+        array $gradePlan
+    ): void {
+        $targetCgpa = round($targetCgpa, 2);
+        $steps = CertificateGrades::gpSteps();
+
+        for ($attempt = 0; $attempt < 200; $attempt++) {
+            $achieved = round($this->previewCgpa($student), 2);
+
+            if ($achieved === $targetCgpa) {
+                return;
+            }
+
+            $diff = $targetCgpa - $achieved;
+            $adjusted = false;
+
+            foreach ($schedule as $entry) {
+                $course = $entry['course'];
+                $plan = $gradePlan[$course->id] ?? null;
+
+                if (!$plan) {
+                    continue;
+                }
+
+                $currentGp = (float) ($plan['gp'] ?? 0);
+                $stepIdx = array_search($currentGp, $steps, true);
+
+                if ($stepIdx === false) {
+                    continue;
+                }
+
+                $newGp = null;
+                if ($diff > 0 && $stepIdx > 0) {
+                    $newGp = $steps[$stepIdx - 1];
+                } elseif ($diff < 0 && $stepIdx < count($steps) - 1) {
+                    $newGp = $steps[$stepIdx + 1];
+                }
+
+                if ($newGp === null) {
+                    continue;
+                }
+
+                if ($this->applyGradePlanToCourseSubmissions($student, $course->id, $newGp)) {
+                    $split = CertificateGrades::marksSplitForGp($newGp);
+                    $gradePlan[$course->id] = [
+                        'gp' => $split['gp'],
+                        'percentage' => $split['percentage'],
+                        'marks' => [
+                            'assignment' => $split['assignment'],
+                            'quiz' => $split['quiz'],
+                            'exam' => $split['exam'],
+                        ],
+                    ];
+                    $adjusted = true;
+                    break;
+                }
+            }
+
+            if (!$adjusted) {
+                break;
+            }
+        }
+    }
+
+    private function applyGradePlanToCourseSubmissions(Student $student, int $courseId, float $gp): bool
+    {
+        $split = CertificateGrades::marksSplitForGp($gp);
+
+        $module = Modules::query()
+            ->where('course_id', $courseId)
+            ->where(function ($q) use ($student) {
+                $q->whereHas('assignments.submissions', fn ($qq) => $qq->where('student_id', $student->id))
+                    ->orWhereHas('quizzes.submissions', fn ($qq) => $qq->where('student_id', $student->id))
+                    ->orWhereHas('exams.submissions', fn ($qq) => $qq->where('student_id', $student->id));
+            })
+            ->with(['assignments.submissions', 'quizzes.submissions', 'exams.submissions'])
+            ->first();
+
+        if (!$module) {
+            return false;
+        }
+
+        $updated = false;
+
+        foreach ($module->assignments as $assessment) {
+            $sub = $assessment->submissions->firstWhere('student_id', $student->id);
+            if ($sub) {
+                $sub->update(['marks_obtained' => $split['assignment']]);
+                $updated = true;
+            }
+        }
+
+        foreach ($module->quizzes as $assessment) {
+            $sub = $assessment->submissions->firstWhere('student_id', $student->id);
+            if ($sub) {
+                $sub->update(['marks_obtained' => $split['quiz']]);
+                $updated = true;
+            }
+        }
+
+        foreach ($module->exams as $assessment) {
+            $sub = $assessment->submissions->firstWhere('student_id', $student->id);
+            if ($sub) {
+                $sub->update(['marks_obtained' => $split['exam']]);
+                $updated = true;
+            }
+        }
+
+        return $updated;
+    }
+
+    /**
      * @param  array<int, float>  $plan
      */
     public function previewCgpaWithPlan(Student $student, array $plan): float
     {
-        $schedule = $this->buildFourYearProgramSchedule($student);
+        $schedule = $this->buildProgramSchedule($student);
         $gps = [];
         $credits = [];
 
@@ -252,18 +460,25 @@ class TranscriptAiStudioService
             $targetPercentage = (float) $run->target_percentage;
             $targetCgpa = (float) ($run->target_cgpa ?? $this->cgpaFromPercentage($targetPercentage));
 
-            $schedule = $this->buildFourYearProgramSchedule($student);
+            $programYears = ProgramDuration::yearsForStudent($student);
+            $schedule = $this->buildProgramSchedule($student);
 
             if ($schedule->isEmpty()) {
                 throw new \RuntimeException('No courses found for this student program/department.');
             }
 
-            $this->initCourseProgressSteps($run, $schedule, $options);
+            $this->initCourseProgressSteps($run, $schedule, $options, $programYears);
 
-            $coursePercentagePlan = $this->buildCoursePercentagePlan(
+            $courseGradePlan = $this->buildCourseGradePlan(
                 $targetCgpa,
                 $schedule,
                 $student->id
+            );
+
+            $plannedCgpa = $this->previewCgpaFromGradePlan($schedule, $courseGradePlan);
+            $run->appendLog(
+                'Grade plan calibrated: target CGPA ' . round($targetCgpa, 2)
+                . ', planned CGPA ' . round($plannedCgpa, 2) . '.'
             );
 
             $run->setStepStatus('init', 'active', 'Initializing AI transcript run');
@@ -274,15 +489,17 @@ class TranscriptAiStudioService
             $run->appendLog("Cleared {$deleted} existing submission(s) for fresh transcript marks.");
             $run->setStepStatus('clear_marks', 'done');
 
-            $run->setStepStatus('schedule', 'active', 'Building 4-year program schedule');
+            $run->setStepStatus('schedule', 'active', "Building {$programYears}-year program schedule");
             $run->appendLog(
-                '4-year program schedule: ' . $schedule->count() . ' course(s). Target: ' . $targetPercentage . '%.'
+                ProgramDuration::label($programYears) . ' program schedule: ' . $schedule->count()
+                . ' course(s) across ' . ProgramDuration::semesterSlots($programYears) . ' semesters. Target: '
+                . $targetPercentage . '%.'
             );
             $run->setStepStatus('schedule', 'done');
 
             $lecturerId = $this->resolveLecturerId($student);
-            $classYears = $this->ensureFourClassYears($student);
-            $academicYears = $this->ensureFourAcademicYears();
+            $classYears = $this->ensureProgramClassYears($student, $programYears);
+            $academicYears = $this->ensureProgramAcademicYears($programYears);
 
             foreach ($classYears as $index => $classYear) {
                 ClassStudent::firstOrCreate([
@@ -323,7 +540,7 @@ class TranscriptAiStudioService
                     $student->id,
                     $course->id,
                     $courseIndex,
-                    $coursePercentagePlan
+                    $courseGradePlan
                 );
 
                 $run->setStepStatus(
@@ -369,7 +586,13 @@ class TranscriptAiStudioService
                     }
 
                     if ($options['bot_auto_mark']) {
-                        $newRows = $this->buildBotSubmissionRows($student, $module, $coursePercent, $now);
+                        $newRows = $this->buildBotSubmissionRows(
+                            $student,
+                            $module,
+                            $coursePercent,
+                            $now,
+                            $courseGradePlan[$course->id]['marks'] ?? null
+                        );
                         $submissionBatch = array_merge($submissionBatch, $newRows);
                         $run->increment('submissions_created', count($newRows));
                     }
@@ -395,14 +618,19 @@ class TranscriptAiStudioService
                 }
             }
 
+            $this->rebalanceSubmissionsToTargetCgpa($student, $targetCgpa, $schedule, $courseGradePlan);
+
             $run->setStepStatus('finalize', 'active', 'Calculating final CGPA');
             $achieved = $this->previewCgpa($student);
             $run->update([
                 'status' => 'completed',
-                'achieved_cgpa' => $achieved,
+                'achieved_cgpa' => round($achieved, 2),
             ]);
             $run->setStepStatus('finalize', 'done', 'Transcript fill completed');
-            $run->appendLog('Completed 4-year fill. Achieved CGPA: ' . $achieved);
+            $run->appendLog(
+                'Completed ' . ProgramDuration::label($programYears) . ' fill. Target CGPA: ' . round($targetCgpa, 2)
+                . '. Achieved CGPA: ' . round($achieved, 2) . '.'
+            );
 
             return $run->fresh();
         } catch (Throwable $e) {
@@ -428,12 +656,12 @@ class TranscriptAiStudioService
     /**
      * @param  array{generate_materials?:bool,generate_assessments?:bool,bot_auto_mark?:bool}  $options
      */
-    private function initCourseProgressSteps(AiTranscriptRun $run, Collection $schedule, array $options): void
+    private function initCourseProgressSteps(AiTranscriptRun $run, Collection $schedule, array $options, int $programYears): void
     {
         $steps = [
             ['id' => 'init', 'label' => 'Initialize AI run'],
             ['id' => 'clear_marks', 'label' => 'Clear old marks'],
-            ['id' => 'schedule', 'label' => 'Build 4-year schedule'],
+            ['id' => 'schedule', 'label' => 'Build ' . ProgramDuration::label($programYears) . ' schedule'],
         ];
 
         if ($this->needsGeminiPrefetch($options)) {
@@ -635,13 +863,20 @@ PROMPT;
         }
     }
 
-    public function buildFourYearProgramSchedule(Student $student): Collection
+    public function buildProgramSchedule(Student $student): Collection
     {
-        $classYears = $this->ensureFourClassYears($student);
-        $academicYears = $this->ensureFourAcademicYears();
+        $programYears = ProgramDuration::yearsForStudent($student);
+        $classYears = $this->ensureProgramClassYears($student, $programYears);
+        $academicYears = $this->ensureProgramAcademicYears($programYears);
 
         $courses = Course::query()
             ->where('department_id', $student->department_id)
+            ->where(function ($q) use ($student) {
+                if ($student->degree_level_id) {
+                    $q->where('degree_level_id', $student->degree_level_id)
+                        ->orWhereNull('degree_level_id');
+                }
+            })
             ->where('status', 'active')
             ->orderBy('code')
             ->get();
@@ -649,6 +884,12 @@ PROMPT;
         if ($courses->isEmpty()) {
             $courses = Course::query()
                 ->where('department_id', $student->department_id)
+                ->when($student->degree_level_id, function ($q) use ($student) {
+                    $q->where(function ($qq) use ($student) {
+                        $qq->where('degree_level_id', $student->degree_level_id)
+                            ->orWhereNull('degree_level_id');
+                    });
+                })
                 ->orderBy('code')
                 ->get();
         }
@@ -676,15 +917,39 @@ PROMPT;
         foreach ($courses as $course) {
             $module = $existingModules->get($course->id);
 
+            if ($course->year_index && $course->semester) {
+                $yearIndex = max(1, min($programYears, (int) $course->year_index));
+                $semester = ProgramDuration::normalizeYearSemester(
+                    $yearIndex,
+                    (int) $course->semester,
+                    $programYears
+                )['semester'];
+                $classYear = $classYears[$yearIndex - 1] ?? $classYears->first();
+
+                $schedule->push([
+                    'course' => $course,
+                    'class_year_id' => $classYear->id,
+                    'academic_year_id' => $academicYears[$yearIndex - 1]->id ?? $academicYears[0]->id,
+                    'semester' => $semester,
+                    'year_index' => $yearIndex,
+                ]);
+
+                continue;
+            }
+
             if ($module) {
                 $classYear = $module->classYear ?? $classYearById->get($module->class_year_id);
-                $yearIndex = $this->resolveYearIndex($classYear, $classYears);
+                $yearIndex = $this->resolveYearIndex($classYear, $classYears, $programYears);
 
                 $schedule->push([
                     'course' => $course,
                     'class_year_id' => $module->class_year_id,
                     'academic_year_id' => $module->academic_year_id ?: $academicYears[$yearIndex - 1]->id,
-                    'semester' => (int) ($module->semester ?: 1),
+                    'semester' => ProgramDuration::normalizeYearSemester(
+                        $yearIndex,
+                        (int) ($module->semester ?: 1),
+                        $programYears
+                    )['semester'],
                     'year_index' => $yearIndex,
                 ]);
             } else {
@@ -704,19 +969,74 @@ PROMPT;
             $slots[] = [
                 'class_year_id' => $classYear->id,
                 'academic_year_id' => $academicYears[$index]->id,
-                'semester' => 2,
+                'semester' => ProgramDuration::SEMESTERS_PER_YEAR,
                 'year_index' => $yearNum,
             ];
         }
 
-        foreach ($unassigned->values() as $i => $course) {
-            $slot = $slots[$i % count($slots)];
-            $schedule->push(array_merge($slot, ['course' => $course]));
-        }
+        $this->distributeCoursesAcrossSlots($unassigned, $slots, $schedule);
 
         return $schedule
             ->sortBy(fn ($item) => sprintf('%02d-%d-%s', $item['year_index'], $item['semester'], $item['course']->code))
             ->values();
+    }
+
+    /** @deprecated Use buildProgramSchedule */
+    public function buildFourYearProgramSchedule(Student $student): Collection
+    {
+        return $this->buildProgramSchedule($student);
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $slots
+     */
+    private function distributeCoursesAcrossSlots(Collection $courses, array $slots, Collection $schedule): void
+    {
+        $courseList = $courses->values()->all();
+        $totalSlots = count($slots);
+
+        if ($totalSlots === 0 || $courseList === []) {
+            return;
+        }
+
+        $count = count($courseList);
+        $basePerSlot = intdiv($count, $totalSlots);
+        $remainder = $count % $totalSlots;
+        $offset = 0;
+
+        foreach ($slots as $slotIndex => $slot) {
+            $take = $basePerSlot + ($slotIndex < $remainder ? 1 : 0);
+            $batch = array_slice($courseList, $offset, $take);
+            $offset += $take;
+
+            foreach ($batch as $course) {
+                $schedule->push(array_merge($slot, ['course' => $course]));
+            }
+        }
+    }
+
+    public function programYearsForStudent(Student $student): int
+    {
+        return ProgramDuration::yearsForStudent($student);
+    }
+
+    /**
+     * @return array<int, array{year_index: int, semester: int, courses: array<int, string>}>
+     */
+    public function scheduleSummary(Student $student): array
+    {
+        $summary = [];
+
+        foreach ($this->buildProgramSchedule($student) as $entry) {
+            $key = $entry['year_index'] . '-' . $entry['semester'];
+            $summary[$key]['year_index'] = $entry['year_index'];
+            $summary[$key]['semester'] = $entry['semester'];
+            $summary[$key]['courses'][] = $entry['course']->code;
+        }
+
+        ksort($summary, SORT_NATURAL);
+
+        return array_values($summary);
     }
 
     public function previewCgpa(Student $student): float
@@ -731,11 +1051,11 @@ PROMPT;
     }
 
     /** @return Collection<int, ClassYear> */
-    private function ensureFourClassYears(Student $student): Collection
+    private function ensureProgramClassYears(Student $student, int $programYears): Collection
     {
         $years = collect();
 
-        for ($i = 1; $i <= self::PROGRAM_YEARS; $i++) {
+        for ($i = 1; $i <= $programYears; $i++) {
             $years->push(ClassYear::firstOrCreate([
                 'year_name' => "Year {$i}",
                 'department_id' => $student->department_id,
@@ -755,18 +1075,18 @@ PROMPT;
     }
 
     /** @return array<int, AcademicYear> */
-    private function ensureFourAcademicYears(): array
+    private function ensureProgramAcademicYears(int $programYears): array
     {
         $existing = AcademicYear::query()->orderBy('period')->get();
 
-        if ($existing->count() >= self::PROGRAM_YEARS) {
-            return $existing->take(self::PROGRAM_YEARS)->values()->all();
+        if ($existing->count() >= $programYears) {
+            return $existing->take($programYears)->values()->all();
         }
 
-        $baseYear = now()->year - (self::PROGRAM_YEARS - 1);
+        $baseYear = now()->year - ($programYears - 1);
         $years = [];
 
-        for ($i = 0; $i < self::PROGRAM_YEARS; $i++) {
+        for ($i = 0; $i < $programYears; $i++) {
             $start = $baseYear + $i;
             $period = "{$start}-" . ($start + 1);
             $years[] = AcademicYear::firstOrCreate(['period' => $period]);
@@ -775,19 +1095,19 @@ PROMPT;
         return $years;
     }
 
-    private function resolveYearIndex(?ClassYear $classYear, Collection $classYears): int
+    private function resolveYearIndex(?ClassYear $classYear, Collection $classYears, int $programYears): int
     {
-        if (!$classYear) {
+        if (! $classYear) {
             return 1;
         }
 
         if (preg_match('/(\d+)/', $classYear->year_name, $m)) {
-            return max(1, min(self::PROGRAM_YEARS, (int) $m[1]));
+            return max(1, min($programYears, (int) $m[1]));
         }
 
         $position = $classYears->search(fn (ClassYear $cy) => $cy->id === $classYear->id);
 
-        return $position === false ? 1 : $position + 1;
+        return $position === false ? 1 : min($programYears, $position + 1);
     }
 
     private function resolveLecturerId(Student $student): int
@@ -1100,7 +1420,8 @@ PROMPT;
         Student $student,
         Modules $module,
         float $coursePercent,
-        $now
+        $now,
+        ?array $exactMarks = null
     ): array {
         $module->load(['assignments.questions', 'quizzes.questions', 'exams.questions', 'course']);
         $rows = [];
@@ -1116,7 +1437,8 @@ PROMPT;
                 $coursePercent,
                 $assessment->questions,
                 $now,
-                $courseId
+                $courseId,
+                $exactMarks['assignment'] ?? null
             );
         }
 
@@ -1130,7 +1452,8 @@ PROMPT;
                 $coursePercent,
                 $assessment->questions,
                 $now,
-                $courseId
+                $courseId,
+                $exactMarks['quiz'] ?? null
             );
         }
 
@@ -1144,7 +1467,8 @@ PROMPT;
                 $coursePercent,
                 $assessment->questions,
                 $now,
-                $courseId
+                $courseId,
+                $exactMarks['exam'] ?? null
             );
         }
 
@@ -1160,9 +1484,10 @@ PROMPT;
         float $coursePercent,
         $questions,
         $now,
-        int $courseId = 0
+        int $courseId = 0,
+        ?int $exactMarks = null
     ): array {
-        $marksObtained = $this->marksForPercentage($coursePercent, $type, $courseId);
+        $marksObtained = $exactMarks ?? $this->marksForPercentage($coursePercent, $type, $courseId);
 
         return [
             'student_id' => $studentId,

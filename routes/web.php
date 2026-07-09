@@ -18,6 +18,7 @@ use App\Http\Controllers\Settings\ProgramController;
 use App\Http\Controllers\Settings\DepartmentController;
 use App\Http\Controllers\Settings\AcademicYearController;
 use App\Http\Controllers\Settings\DegreeLevelsController;
+use App\Http\Controllers\StudentPhotoController;
 
 /*
 |--------------------------------------------------------------------------
@@ -33,6 +34,9 @@ use App\Http\Controllers\Settings\DegreeLevelsController;
 Route::get('/', function () {
     return to_route('login');
 });
+
+Route::get('/student-photos/{student}', [StudentPhotoController::class, 'show'])
+    ->name('student-photos.show');
 
 Route::middleware('auth')->group(function () {
 

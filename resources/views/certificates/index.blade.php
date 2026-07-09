@@ -38,9 +38,7 @@
 
     @isset($student)
         @php
-            $photoUrl = $student->profile_img
-                ? asset('storage/' . ltrim($student->profile_img, '/'))
-                : asset('images/profile.jpg');
+            $photoUrl = \App\Support\StudentPhoto::url($student);
         @endphp
 
         <div class="card shadow mt-3">

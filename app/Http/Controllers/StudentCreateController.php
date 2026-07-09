@@ -92,9 +92,7 @@ class StudentCreateController extends Controller
                         'phone'      => $s->phone,
                         'status'     => $s->status,
                         'level'      => optional($s->degreeLevel)->name,
-                        'profile_img_url' => $s->profile_img
-                            ? asset('storage/' . ltrim($s->profile_img, '/'))
-                            : asset('images/profile.jpg'),
+                        'profile_img_url' => \App\Support\StudentPhoto::url($s),
                     ];
                 });
 

@@ -168,9 +168,7 @@
 @endphp
 
 <img class="rounded-circle header-profile-user"
-     src="{{ $student && $student->profile_img 
-            ? asset('storage/profile_images/' . basename($student->profile_img)) 
-            : asset('assets/images/users/avatar-1.jpg') }}"
+     src="{{ $student ? \App\Support\StudentPhoto::url($student) : asset('assets/images/users/avatar-1.jpg') }}"
      alt="Profile Photo">
 
 

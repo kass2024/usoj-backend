@@ -8,6 +8,7 @@ use App\Models\Student;
 use App\Services\GeminiAiService;
 use App\Services\TranscriptAiStudioService;
 use App\Support\CertificateGrades;
+use App\Support\ProgramDuration;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
@@ -22,6 +23,9 @@ class AiTranscriptStudioController extends Controller
         $estimatedCgpa = null;
         $estimatedPercentage = null;
         $courseCount = 0;
+        $programYears = ProgramDuration::BACHELOR_YEARS;
+        $semesterSlots = ProgramDuration::semesterSlots($programYears);
+        $scheduleSummary = [];
         $targetScale = 'cgpa';
         $targetValue = 4.5;
 
@@ -52,7 +56,11 @@ class AiTranscriptStudioController extends Controller
             $estimatedClass = CertificateGrades::classifyCgpa($estimatedCgpa);
 
             if ($student) {
-                $courseCount = $studio->buildFourYearProgramSchedule($student)->count();
+                $programYears = $studio->programYearsForStudent($student);
+                $semesterSlots = ProgramDuration::semesterSlots($programYears);
+                $schedule = $studio->buildProgramSchedule($student);
+                $courseCount = $schedule->count();
+                $scheduleSummary = $studio->scheduleSummary($student);
             }
         }
 
@@ -69,6 +77,9 @@ class AiTranscriptStudioController extends Controller
             'estimatedCgpa',
             'estimatedPercentage',
             'courseCount',
+            'programYears',
+            'semesterSlots',
+            'scheduleSummary',
             'targetScale',
             'targetValue',
             'gemini'
@@ -184,6 +195,13 @@ class AiTranscriptStudioController extends Controller
         return view('ai-transcript-studio.show-run', compact('run'));
     }
 
+    public function generateTranscript(Student $student, CertificatesController $certificates)
+    {
+        $student->loadMissing(['department.school', 'degree_level']);
+
+        return $certificates->streamTranscriptPdf($student);
+    }
+
     public function cancel(Request $request, AiTranscriptRun $run)
     {
         if (!$run->markCancelled()) {
@@ -221,8 +239,8 @@ class AiTranscriptStudioController extends Controller
         $run->load('materials');
 
         foreach ($run->materials as $material) {
-            if ($material->pdf_path && Storage::disk('local')->exists($material->pdf_path)) {
-                Storage::disk('local')->delete($material->pdf_path);
+            if ($material->pdf_path && Storage::disk('public')->exists($material->pdf_path)) {
+                Storage::disk('public')->delete($material->pdf_path);
             }
         }
 

@@ -4,102 +4,200 @@ namespace App\Http\Controllers\Settings;
 
 use App\Http\Controllers\Controller;
 use App\Models\Course;
-use Illuminate\Support\Str;
+use App\Models\Department;
+use App\Services\CourseTextImportService;
+use App\Support\CourseDegreeLevelResolver;
+use App\Support\ProgramDuration;
+use App\Support\Utf8Sanitizer;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
 class CourseController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
-    public function index()
-    {
-        //
-    }
-
-    /**
-     * Show the form for creating a new resource.
-     */
-    public function create()
-    {
-        //
-    }
-
-    /**
-     * Store a newly created resource in storage.
-     */
     public function store(Request $request)
     {
-        // Validate the request
-        $request->validate([
-            'name' => 'required|string|min:4|',
-            'code' => 'required|string|min:2|unique:courses,code',
-            'description' => 'nullable',
-            'department_id' => 'required',
-            'credits' => 'required|numeric|min:0',
-            'status' => 'required',
-        ]);
-        $request->merge(['slug' => Str::slug($request->name)]);
+        $validated = $this->validateCourse($request);
 
         try {
-            Course::create($request->all());
+            Course::create($validated);
+
             return back()->with('message', 'Courses added successfully');
         } catch (\Throwable $th) {
             return back()->with('error', $th->getMessage());
         }
     }
 
-    /**
-     * Display the specified resource.
-     */
     public function show($department)
     {
         $courses = Course::where('department_id', $department)->orderByDesc('id')->get();
+
         return view('settings.courses', compact('courses', 'department'));
     }
 
-    /**
-     * Show the form for editing the specified resource.
-     */
     public function edit(Course $course)
     {
         //
     }
 
-    /**
-     * Update the specified resource in storage.
-     */
     public function update(Request $request, Course $course)
     {
-        $request->validate([
-            'name' => 'required|string|min:4|',
-            'code' => 'required|string|min:2|unique:courses,code,' . $course->id,
-            'description' => 'nullable',
-            'department_id' => 'required',
-            'credits' => 'required|numeric|min:0',
-            'status' => 'required',
-        ]);
-        $request->merge(['slug' => Str::slug($request->name)]);
-
+        $validated = $this->validateCourse($request, $course);
 
         try {
-            $course->update($request->all());
+            $course->update($validated);
+
             return back()->with('message', 'Courses updated successfully');
         } catch (\Throwable $th) {
             return back()->with('error', $th->getMessage());
         }
     }
 
-    /**
-     * Remove the specified resource from storage.
-     */
     public function destroy(Course $course)
     {
         try {
             $course->delete();
+
             return back()->with('message', 'Courses deleted successfully');
         } catch (\Throwable $th) {
             return back()->with('error', $th->getMessage());
         }
+    }
+
+    public function parseBulkText(Request $request, CourseTextImportService $importService)
+    {
+        try {
+            $data = $request->validate([
+                'department_id' => 'required|exists:departments,id',
+                'degree_level_id' => 'required|exists:degree_levels,id',
+                'course_text' => 'required|string|min:10',
+            ]);
+
+            $data['course_text'] = Utf8Sanitizer::clean($data['course_text']);
+
+            $department = Department::query()->findOrFail($data['department_id']);
+            $degreeLevel = CourseDegreeLevelResolver::resolveForDepartment($department, (int) $data['degree_level_id']);
+
+            if (! $degreeLevel) {
+                return response()->json(['message' => 'Invalid degree level for this department.'], 422);
+            }
+
+            $preview = $importService->preview($data['course_text'], $department, $degreeLevel);
+
+            if ($preview === []) {
+                return response()->json(['message' => 'No courses detected. Paste one course per line.'], 422);
+            }
+
+            return response()->json(Utf8Sanitizer::cleanArray([
+                'courses' => $preview,
+                'count' => count($preview),
+                'program_years' => ProgramDuration::yearsForDegreeLevel($degreeLevel),
+                'semesters_per_year' => ProgramDuration::SEMESTERS_PER_YEAR,
+                'semester_slots' => ProgramDuration::semesterSlotsForLevel($degreeLevel),
+                'structure_label' => ProgramDuration::structureLabel($degreeLevel),
+            ]));
+        } catch (\Throwable $e) {
+            return response()->json([
+                'message' => 'Could not analyse courses. Check your text and try again.',
+            ], 422);
+        }
+    }
+
+    public function bulkTextImport(Request $request, CourseTextImportService $importService)
+    {
+        $data = $request->validate([
+            'department_id' => 'required|exists:departments,id',
+            'degree_level_id' => 'required|exists:degree_levels,id',
+            'course_text' => 'required|string|min:10',
+        ]);
+
+        $result = $importService->import(
+            Utf8Sanitizer::clean($data['course_text']),
+            (int) $data['department_id'],
+            (int) $data['degree_level_id']
+        );
+
+        if ($result->created() === 0 && $result->updated() === 0) {
+            return back()
+                ->with('error', $result->summaryMessage())
+                ->with('import_errors', $result->errors());
+        }
+
+        return back()
+            ->with('message', $result->summaryMessage())
+            ->with('import_errors', $result->errors());
+    }
+
+    /** @return array<string, mixed> */
+    protected function validateCourse(Request $request, ?Course $course = null): array
+    {
+        $departmentId = (int) $request->input('department_id');
+        $degreeLevelId = (int) $request->input('degree_level_id');
+
+        $department = Department::query()->findOrFail($departmentId);
+        $degreeLevel = CourseDegreeLevelResolver::resolveForDepartment($department, $degreeLevelId);
+
+        if (! $degreeLevel) {
+            abort(422, 'Selected degree level does not belong to this department\'s program.');
+        }
+
+        $programYears = ProgramDuration::yearsForDegreeLevel($degreeLevel);
+
+        $validated = $request->validate([
+            'name' => [
+                'required',
+                'string',
+                'min:4',
+                Rule::unique('courses', 'name')
+                    ->where(fn ($q) => $q
+                        ->where('department_id', $departmentId)
+                        ->where('degree_level_id', $degreeLevelId))
+                    ->ignore($course?->id),
+            ],
+            'code' => [
+                'required',
+                'string',
+                'min:2',
+                Rule::unique('courses', 'code')
+                    ->where(fn ($q) => $q
+                        ->where('department_id', $departmentId)
+                        ->where('degree_level_id', $degreeLevelId))
+                    ->ignore($course?->id),
+            ],
+            'description' => 'nullable',
+            'department_id' => 'required|exists:departments,id',
+            'degree_level_id' => 'required|exists:degree_levels,id',
+            'credits' => 'required|numeric|min:1|max:12',
+            'status' => 'required|in:active,inactive',
+            'year_index' => "nullable|integer|min:1|max:{$programYears}",
+            'semester' => 'nullable|integer|in:1,2',
+        ]);
+
+        $validated['slug'] = $this->uniqueSlug(
+            $validated['name'],
+            $validated['code'],
+            $course?->id
+        );
+
+        return $validated;
+    }
+
+    protected function uniqueSlug(string $name, string $code, ?int $ignoreId = null): string
+    {
+        $base = Str::slug($name) ?: Str::slug($code);
+        $slug = $base;
+        $suffix = 1;
+
+        while (
+            Course::query()
+                ->where('slug', $slug)
+                ->when($ignoreId, fn ($q) => $q->where('id', '!=', $ignoreId))
+                ->exists()
+        ) {
+            $slug = $base.'-'.Str::slug($code).($suffix > 1 ? '-'.$suffix : '');
+            $suffix++;
+        }
+
+        return $slug;
     }
 }

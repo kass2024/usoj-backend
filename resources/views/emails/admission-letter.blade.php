@@ -137,9 +137,7 @@
 
       <center>
         <img class="qr-code" alt="USJ QR Code"
-          src="data:image/png;base64,{{ base64_encode(QrCode::format('png')->size(300)->generate("Name: $student->fname $student->lname | Reg No: $regNumber")) }}" />
-       
-       
+          src="{{ \App\Support\SafeQrCode::dataUri("Name: {$student->fname} {$student->lname} | Reg No: {$regNumber}", 300) }}" />
       </center>
     </div>
 

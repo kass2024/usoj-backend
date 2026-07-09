@@ -63,7 +63,7 @@
         .student-box .meta { width: 58%; font-size: 8.5pt; line-height: 1.55; }
         .student-box .meta b { display: inline-block; width: 30mm; font-weight: bold; }
         .student-box .qr { width: 25%; text-align: center; font-size: 7.5pt; }
-        .student-box .qr img { width: 20mm; height: 20mm; }
+        .student-box .qr .qr-mark svg { width: 20mm; height: 20mm; display: block; margin: 0 auto; }
         .student-box .qr .serial { margin-top: 1mm; font-weight: bold; font-size: 7.5pt; }
 
         .results-wrap {
@@ -245,7 +245,7 @@
                     <div><b>COMPLETION YEAR:</b> {{ $completion_year }}</div>
                 </td>
                 <td class="qr">
-                    <img src="data:image/png;base64,{{ base64_encode(QrCode::format('png')->size(90)->generate('USJ Transcript | ' . $student->reg_number . ' | ' . $student_fullname)) }}" alt="QR">
+                    <div class="qr-mark">{!! \App\Support\SafeQrCode::svg('USJ Transcript | ' . $student->reg_number . ' | ' . $student_fullname, 90) !!}</div>
                     <div class="serial">{{ $serial_number }}</div>
                 </td>
             </tr>

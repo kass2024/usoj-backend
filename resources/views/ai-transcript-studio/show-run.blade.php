@@ -131,10 +131,10 @@
             </div>
         </div>
 
-        @if ($run->status === 'completed')
+        @if ($run->status === 'completed' && $run->student)
             <div class="mt-4">
-                <a href="{{ route('certificates.transcript', encrypt($run->student_id)) }}" target="_blank" class="btn btn-success btn-lg">
-                    <i class="ri-file-pdf-line"></i> Generate Transcript Now
+                <a href="{{ route('ai-transcript-studio.transcript', $run->student) }}" target="_blank" class="btn btn-success btn-lg">
+                    <i class="ri-file-pdf-line"></i> Generate Transcript PDF
                 </a>
             </div>
         @endif

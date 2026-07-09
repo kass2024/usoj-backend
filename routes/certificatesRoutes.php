@@ -3,6 +3,7 @@
 use App\Http\Controllers\AiTranscriptStudioController;
 use App\Http\Controllers\CertificatesController;
 use App\Http\Controllers\CoursesSchoolViewController;
+use App\Http\Controllers\Settings\CourseController;
 use App\Http\Controllers\DocumentUploadLinkController;
 use App\Http\Controllers\DocumentUploadPortalController;
 use App\Http\Controllers\StudentCreateController;
@@ -39,6 +40,7 @@ Route::controller(AiTranscriptStudioController::class)
         Route::post('/runs/{run}/cancel', 'cancel')->name('run.cancel');
         Route::delete('/runs/{run}', 'destroy')->name('run.destroy');
         Route::get('/runs/{run}', 'showRun')->name('run.show');
+        Route::get('/students/{student}/transcript', 'generateTranscript')->name('transcript');
     });
 
 // ---------------- DMI: manage private upload links (staff) ----------------
@@ -77,7 +79,10 @@ Route::controller(CoursesSchoolViewController::class)
         Route::get('/', 'index')->name('index');
         Route::get('/programs/{program}/schools', 'schoolsByProgram')->name('schools.byProgram');
         Route::get('/schools/{school}/departments', 'departmentsBySchool')->name('departments.bySchool');
+        Route::get('/departments/{department}/levels', 'levelsByDepartment')->name('levels.byDepartment');
         Route::get('/departments/{department}/courses', 'coursesByDepartment')->name('courses.byDepartment');
+        Route::post('/bulk-text-parse', [CourseController::class, 'parseBulkText'])->name('bulkTextParse');
+        Route::post('/bulk-text-import', [CourseController::class, 'bulkTextImport'])->name('bulkTextImport');
     });
 
 // ---------------- Students (cascade JSON + page) ----------------

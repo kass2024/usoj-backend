@@ -151,11 +151,7 @@ class CertificatePresenter
 
     public static function photoUrl(Student $student): string
     {
-        if ($student->profile_img) {
-            return asset('storage/' . ltrim($student->profile_img, '/'));
-        }
-
-        return asset('images/profile.jpg');
+        return StudentPhoto::url($student);
     }
 
     public static function registrarStampPath(): string

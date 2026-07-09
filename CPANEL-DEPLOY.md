@@ -26,6 +26,17 @@ cPanel → **Terminal** (or SSH):
 cd ~/e-learning.uosj.ac.ug
 cp .env.cpanel .env
 composer install --no-dev --optimize-autoloader
+```
+
+If `composer` is not on PATH, use:
+
+```bash
+php composer.phar install --no-dev --optimize-autoloader
+```
+
+Bulk course Excel upload uses built-in PHP spreadsheet helpers (no extra Composer package required).
+
+```bash
 php artisan storage:link
 php artisan migrate --force
 php artisan config:cache

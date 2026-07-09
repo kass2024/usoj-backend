@@ -21,9 +21,7 @@
             <x-input-label for="profile_img" :value="__('Profile Photo')" />
 
             @php
-                $photoUrl = $student->profile_img
-                    ? asset('storage/' . ltrim($student->profile_img, '/'))
-                    : asset('images/profile.jpg');
+                $photoUrl = \App\Support\StudentPhoto::url($student);
             @endphp
 
             <div class="mb-2">

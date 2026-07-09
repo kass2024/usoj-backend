@@ -50,9 +50,64 @@ class CertificateGrades
     }
 
     /** @return array<float> */
+    public static function gpSteps(): array
+    {
+        return [5.0, 4.5, 4.0, 3.5, 3.0, 2.5, 2.0, 1.5, 1.0, 0.5, 0.0];
+    }
+
+    /** @return array<float> */
     public static function gradePointPalette(): array
     {
         return [5.0, 4.5, 4.0, 3.5, 3.0, 2.5, 4.5, 4.0, 5.0, 3.5, 4.0, 4.5, 3.0, 3.5, 4.0, 2.5, 4.5, 5.0, 3.5, 4.0, 4.5, 3.0, 4.0, 3.5, 2.5, 3.0];
+    }
+
+    /**
+     * Integer marks (30/30/40) that produce the requested GP on the transcript.
+     *
+     * @return array{assignment: int, quiz: int, exam: int, percentage: float, gp: float}
+     */
+    public static function marksSplitForGp(float $gp): array
+    {
+        $targetGp = self::snapGp($gp);
+        $idealTotal = (int) round(self::percentageForGp($targetGp));
+        $total = $idealTotal;
+
+        for ($try = 0; $try < 8; $try++) {
+            $candidate = $idealTotal + (($try % 2 === 0) ? (int) ceil($try / 2) : -(int) ceil($try / 2));
+            $candidate = max(0, min(100, $candidate));
+
+            if (self::fromPercentage((float) $candidate)['gp'] === $targetGp) {
+                $total = $candidate;
+                break;
+            }
+        }
+
+        $assign = (int) round(30 * $total / 100);
+        $quiz = (int) round(30 * $total / 100);
+        $exam = $total - $assign - $quiz;
+
+        if ($exam > 40) {
+            $overflow = $exam - 40;
+            $exam = 40;
+            $quiz = max(0, $quiz - (int) ceil($overflow / 2));
+            $assign = max(0, $assign - (int) floor($overflow / 2));
+        }
+
+        $assign = min(30, max(0, $assign));
+        $quiz = min(30, max(0, $quiz));
+        $exam = min(40, max(0, $exam));
+
+        $actualTotal = $assign + $quiz + $exam;
+        $percentage = round(($actualTotal / 100) * 100, 2);
+        $resolved = self::fromPercentage($percentage);
+
+        return [
+            'assignment' => $assign,
+            'quiz' => $quiz,
+            'exam' => $exam,
+            'percentage' => $percentage,
+            'gp' => $resolved['gp'],
+        ];
     }
 
     public static function snapGp(float $gp): float
@@ -130,21 +185,60 @@ class CertificateGrades
      * @param  array<string, array<int, array<string, mixed>>>  $grouped
      * @return array<int, array<string, mixed>>
      */
-    public static function buildSemesters(array $grouped): array
+    public static function buildSemesters(array $grouped, ?int $programYears = null): array
     {
+        $slotCourses = [];
+
+        foreach ($grouped as $yearKey => $courses) {
+            $courses = array_values($courses);
+            if ($courses === []) {
+                continue;
+            }
+
+            $yearIdx = (int) ($courses[0]['year_index'] ?? self::parseYearIndexFromKey($yearKey));
+            $hasSemester = array_key_exists('semester', $courses[0]);
+
+            if ($hasSemester) {
+                foreach ($courses as $course) {
+                    $sem = max(1, min(2, (int) ($course['semester'] ?? 1)));
+                    $slotCourses[sprintf('%02d-%d', $yearIdx, $sem)][] = $course;
+                }
+
+                continue;
+            }
+
+            $chunks = array_chunk($courses, max(1, (int) ceil(count($courses) / 2)));
+            foreach ($chunks as $semesterIndex => $chunk) {
+                $sem = $semesterIndex + 1;
+                foreach ($chunk as $course) {
+                    $slotCourses[sprintf('%02d-%d', $yearIdx, $sem)][] = $course;
+                }
+            }
+        }
+
+        ksort($slotCourses, SORT_NATURAL);
+
+        $maxYear = $programYears;
+        if (! $maxYear) {
+            $maxYear = 1;
+            foreach (array_keys($slotCourses) as $key) {
+                $year = (int) explode('-', $key)[0];
+                $maxYear = max($maxYear, $year);
+            }
+        }
+
         $semesters = [];
-        $yearIndex = 0;
         $runningCgpaNumerator = 0.0;
         $runningCgpaUnits = 0;
 
-        foreach ($grouped as $yearKey => $courses) {
-            $yearIndex++;
-            $chunks = array_chunk(array_values($courses), max(1, (int) ceil(count($courses) / 2)));
+        for ($year = 1; $year <= $maxYear; $year++) {
+            for ($semesterNumber = 1; $semesterNumber <= \App\Support\ProgramDuration::SEMESTERS_PER_YEAR; $semesterNumber++) {
+                $chunk = $slotCourses[sprintf('%02d-%d', $year, $semesterNumber)] ?? [];
+                if ($chunk === []) {
+                    continue;
+                }
 
-            foreach ($chunks as $semesterIndex => $chunk) {
-                $semesterNumber = $semesterIndex + 1;
                 $enriched = [];
-
                 foreach ($chunk as $course) {
                     $grades = self::fromPercentage((float) ($course['percentage'] ?? 0));
                     $enriched[] = array_merge($course, $grades);
@@ -163,8 +257,9 @@ class CertificateGrades
                     : 0.0;
 
                 $semesters[] = [
-                    'title'      => "YEAR {$yearIndex} — SEMESTER {$semesterNumber}",
-                    'year_index' => $yearIndex,
+                    'title'      => "YEAR {$year} — SEMESTER {$semesterNumber}",
+                    'year_index' => $year,
+                    'semester'   => $semesterNumber,
                     'courses'    => $enriched,
                     'gpa'        => $gpa,
                     'cgpa'       => $cgpa,
@@ -173,6 +268,15 @@ class CertificateGrades
         }
 
         return $semesters;
+    }
+
+    private static function parseYearIndexFromKey(string $yearKey): int
+    {
+        if (preg_match('/year\s*(\d+)/i', $yearKey, $match)) {
+            return max(1, (int) $match[1]);
+        }
+
+        return 1;
     }
 
     public static function finalCgpa(array $semesters): float

@@ -15,7 +15,9 @@
                     <div>
                         <h4 class="text-white mb-1"><i class="ri-robot-2-line me-2"></i>AI Transcript Studio</h4>
                         <p class="mb-0 opacity-75 small">
-                            <strong>AI mode</strong> auto-fills 4 years. <strong>Manual mode</strong> is still available under
+                            <strong>AI mode</strong> auto-fills programs by degree level:
+                            Bachelor = 4 years × 2 semesters, Master = 2 years × 2 semesters.
+                            <strong>Manual mode</strong> is still available under
                             <a href="{{ route('certificates.index') }}" class="text-white text-decoration-underline">Generate Academic Docs</a>.
                         </p>
                     </div>
@@ -57,8 +59,39 @@
                         @if ($student->department)
                             <p class="mb-1 small text-muted">{{ $student->department->name }}</p>
                         @endif
+                        @if ($student->degree_level)
+                            <p class="mb-1 small">
+                                <strong>Level:</strong> {{ $student->degree_level->name }}
+                            </p>
+                            <p class="mb-2 small text-primary fw-semibold">
+                                {{ \App\Support\ProgramDuration::structureLabel($student->degree_level) }}
+                            </p>
+                        @endif
                         @if ($courseCount > 0)
-                            <p class="mb-0 small"><strong>{{ $courseCount }}</strong> courses across 4 years</p>
+                            <p class="mb-2 small">
+                                <strong>{{ $courseCount }}</strong> courses scheduled across
+                                <strong>{{ $semesterSlots ?? 8 }}</strong> semesters
+                            </p>
+                        @endif
+                        @if (!empty($scheduleSummary))
+                            <div class="small border-top pt-2 mt-2">
+                                <div class="fw-semibold mb-1">Course placement preview</div>
+                                <ul class="list-unstyled mb-0">
+                                    @foreach ($scheduleSummary as $slot)
+                                        <li class="mb-1">
+                                            <span class="text-muted">Y{{ $slot['year_index'] }} S{{ $slot['semester'] }}:</span>
+                                            {{ implode(', ', $slot['courses'] ?? []) }}
+                                        </li>
+                                    @endforeach
+                                </ul>
+                            </div>
+                        @endif
+                        @if ($student)
+                            <div class="mt-3">
+                                <a href="{{ route('ai-transcript-studio.transcript', $student) }}" target="_blank" class="btn btn-outline-primary btn-sm">
+                                    <i class="ri-file-pdf-line"></i> Generate Transcript PDF
+                                </a>
+                            </div>
                         @endif
                     </div>
                 @endisset
@@ -206,7 +239,7 @@
                         <div class="col-md-2"><div class="fs-4 fw-bold text-success">{{ $lastRun->achieved_cgpa }}</div><small>Achieved</small></div>
                     </div>
                     @if ($student)
-                        <a href="{{ route('certificates.transcript', encrypt($student->id)) }}" target="_blank" class="btn btn-primary">
+                        <a href="{{ route('ai-transcript-studio.transcript', $student) }}" target="_blank" class="btn btn-primary">
                             <i class="ri-file-pdf-line"></i> Generate Transcript PDF
                         </a>
                         <a href="{{ route('ai-transcript-studio.run.show', $lastRun) }}" class="btn btn-outline-secondary">View full log</a>
@@ -264,6 +297,9 @@
                                 <td>{{ $run->created_at->format('d M Y H:i') }}</td>
                                 <td class="text-nowrap">
                                     <a href="{{ route('ai-transcript-studio.run.show', $run) }}" class="btn btn-sm btn-outline-primary">Log</a>
+                                    @if ($run->student && $run->status === 'completed')
+                                        <a href="{{ route('ai-transcript-studio.transcript', $run->student) }}" target="_blank" class="btn btn-sm btn-outline-success">PDF</a>
+                                    @endif
                                     @if ($run->isActive())
                                         <form action="{{ route('ai-transcript-studio.run.cancel', $run) }}" method="post" class="d-inline">
                                             @csrf
@@ -320,8 +356,8 @@
 
         <div class="mt-3 d-none" id="ai-done-actions">
             @isset($student)
-            <a href="{{ route('certificates.transcript', encrypt($student->id)) }}" target="_blank" class="btn btn-primary btn-sm me-2">
-                <i class="ri-file-pdf-line"></i> Generate Transcript (Manual PDF)
+            <a href="{{ route('ai-transcript-studio.transcript', $student) }}" target="_blank" class="btn btn-primary btn-sm me-2">
+                <i class="ri-file-pdf-line"></i> Generate Transcript PDF
             </a>
             @endisset
             <button type="button" class="btn btn-outline-secondary btn-sm" id="ai-close-overlay">Close</button>

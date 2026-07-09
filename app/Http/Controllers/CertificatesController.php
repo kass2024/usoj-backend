@@ -6,6 +6,7 @@ use App\Models\Modules;
 use App\Models\Student;
 use App\Support\CertificateGrades;
 use App\Support\CertificatePresenter;
+use App\Support\ProgramDuration;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
@@ -67,6 +68,13 @@ class CertificatesController extends Controller
     {
         $studentId = decrypt($studentId);
         $student = Student::with(['department.school', 'degree_level'])->findOrFail($studentId);
+
+        return $this->streamTranscriptPdf($student);
+    }
+
+    public function streamTranscriptPdf(Student $student)
+    {
+        $student->loadMissing(['department.school', 'degree_level']);
 
         return $this->makeTranscriptPdf($student)->stream($student->reg_number . '_transcript.pdf');
     }
@@ -239,7 +247,8 @@ class CertificatesController extends Controller
     private function buildCertificateData(Student $student): array
     {
         $grouped = $this->getStudentCoursesFromSubmissions($student);
-        $semesters = CertificateGrades::buildSemesters($grouped);
+        $programYears = ProgramDuration::yearsForStudent($student);
+        $semesters = CertificateGrades::buildSemesters($grouped, $programYears);
         $finalCgpa = CertificateGrades::finalCgpa($semesters);
 
         return [
@@ -339,8 +348,13 @@ class CertificatesController extends Controller
             $moduleClassYear = $module->class_year;
             $yearName = $moduleClassYear->year_name ?? ($moduleClassYear->name ?? 'Year');
 
+            $yearIndex = 1;
+            if (preg_match('/(\d+)/', (string) $yearName, $yearMatch)) {
+                $yearIndex = max(1, (int) $yearMatch[1]);
+            }
+
             $ay = $moduleClassYear->academic_year ?? null;
-            $ayName = $ay->name ?? ($ay->title ?? ($ay->label ?? ''));
+            $ayName = $ay->name ?? ($ay->title ?? ($ay->label ?? ($ay->period ?? '')));
 
             $yearKey = trim($yearName . ' — ' . $ayName);
 
@@ -359,6 +373,8 @@ class CertificatesController extends Controller
                 'credit_max'   => $creditMax,
                 'credit_marks' => $creditMax,
                 'percentage'   => $percentage,
+                'year_index'   => $yearIndex,
+                'semester'     => max(1, min(2, (int) ($module->semester ?: 1))),
             ];
         }
 
