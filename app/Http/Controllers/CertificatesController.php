@@ -4,9 +4,14 @@ namespace App\Http\Controllers;
 
 use App\Models\Modules;
 use App\Models\Student;
+use App\Support\AiAssessmentResults;
+use App\Support\AiAssessmentSelector;
 use App\Support\CertificateGrades;
 use App\Support\CertificatePresenter;
 use App\Support\ProgramDuration;
+use App\Support\TranscriptProfile;
+use App\Support\StudentCompletionYear;
+use App\Support\TranscriptSemesterLabels;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
@@ -69,12 +74,65 @@ class CertificatesController extends Controller
         $studentId = decrypt($studentId);
         $student = Student::with(['department.school', 'degree_level'])->findOrFail($studentId);
 
+        if (! TranscriptProfile::isReady($student)) {
+            return redirect()
+                ->route('certificates.index')
+                ->with('certificate_student_id', $student->id)
+                ->with('transcript_profile_required', true)
+                ->with('error', TranscriptProfile::readinessPayload($student)['message']);
+        }
+
         return $this->streamTranscriptPdf($student);
+    }
+
+    public function transcriptReadiness($studentId)
+    {
+        $student = Student::findOrFail(decrypt($studentId));
+
+        return response()->json(TranscriptProfile::readinessPayload($student));
+    }
+
+    public function updateTranscriptProfile(Request $request, $studentId)
+    {
+        $student = Student::findOrFail(decrypt($studentId));
+
+        $data = $request->validate([
+            'gender' => 'required|in:MALE,FEMALE,OTHER',
+            'date_of_birth' => 'required|date|before:today',
+            'nationality' => 'nullable|string|max:80',
+        ]);
+
+        $student->update([
+            'gender' => strtoupper($data['gender']),
+            'date_of_birth' => $data['date_of_birth'],
+            'nationality' => $data['nationality'] ?? $student->nationality,
+        ]);
+        StudentCompletionYear::syncToStudent($student->fresh())->save();
+
+        if ($request->boolean('generate_after')) {
+            return $this->streamTranscriptPdf($student->fresh());
+        }
+
+        if ($request->expectsJson() || $request->ajax()) {
+            return response()->json([
+                'message' => 'Transcript profile updated.',
+                'ready' => TranscriptProfile::isReady($student->fresh()),
+            ]);
+        }
+
+        return redirect()
+            ->route('certificates.index')
+            ->with('certificate_student_id', $student->id)
+            ->with('success', 'Transcript profile updated. You can now generate the transcript.');
     }
 
     public function streamTranscriptPdf(Student $student)
     {
         $student->loadMissing(['department.school', 'degree_level']);
+
+        if (! TranscriptProfile::isReady($student)) {
+            abort(422, TranscriptProfile::readinessPayload($student)['message']);
+        }
 
         return $this->makeTranscriptPdf($student)->stream($student->reg_number . '_transcript.pdf');
     }
@@ -112,6 +170,14 @@ class CertificatesController extends Controller
         $attachments = [];
 
         if (in_array($documents, ['transcript', 'both'], true)) {
+            if (! TranscriptProfile::isReady($student)) {
+                return redirect()
+                    ->route('certificates.index')
+                    ->with('certificate_student_id', $student->id)
+                    ->with('transcript_profile_required', true)
+                    ->with('error', TranscriptProfile::readinessPayload($student)['message']);
+            }
+
             $attachments[] = [
                 'pdf' => $this->makeTranscriptPdf($student),
                 'filename' => $student->reg_number . '_transcript.pdf',
@@ -228,7 +294,7 @@ class CertificatesController extends Controller
                 'isRemoteEnabled' => true,
                 'isHtml5ParserEnabled' => true,
                 'dpi' => 150,
-                'defaultFont' => 'Times-Roman',
+                'defaultFont' => 'Arial',
             ]);
     }
 
@@ -240,7 +306,7 @@ class CertificatesController extends Controller
                 'isRemoteEnabled' => true,
                 'isHtml5ParserEnabled' => true,
                 'dpi' => 150,
-                'defaultFont' => 'Times-Roman',
+                'defaultFont' => 'Arial',
             ]);
     }
 
@@ -248,7 +314,10 @@ class CertificatesController extends Controller
     {
         $grouped = $this->getStudentCoursesFromSubmissions($student);
         $programYears = ProgramDuration::yearsForStudent($student);
-        $semesters = CertificateGrades::buildSemesters($grouped, $programYears);
+        $semesters = TranscriptSemesterLabels::apply(
+            CertificateGrades::buildSemesters($grouped, $programYears),
+            $student
+        );
         $finalCgpa = CertificateGrades::finalCgpa($semesters);
 
         return [
@@ -266,7 +335,11 @@ class CertificatesController extends Controller
             'show_photo'       => true,
             'crest_data_uri'   => CertificatePresenter::crestDataUri(),
             'serial_number'    => CertificatePresenter::serialNumber($student),
-            'completion_year'  => CertificatePresenter::completionYear(),
+            'completion_year'  => CertificatePresenter::completionYear($student),
+            'gender_label'     => TranscriptProfile::genderLabel($student),
+            'date_of_birth'    => TranscriptProfile::dateOfBirthFormatted($student),
+            'nationality'      => TranscriptProfile::nationality($student),
+            'photo_id'         => TranscriptProfile::photoId($student),
             'issue_date'       => CertificatePresenter::formattedDate(),
             'student_fullname' => CertificatePresenter::studentFullName($student),
             'student_name'     => CertificatePresenter::studentDisplayName($student),
@@ -282,6 +355,7 @@ class CertificatesController extends Controller
     private function getStudentCoursesFromSubmissions(Student $student): array
     {
         $studentId = $student->id;
+        $gradePlan = AiAssessmentResults::gradePlanForStudent($student) ?? [];
 
         $modules = Modules::query()
             ->with([
@@ -316,7 +390,8 @@ class CertificatesController extends Controller
             $max = 0.0;
             $has = false;
 
-            foreach ($module->assignments as $assignment) {
+            $assignment = AiAssessmentSelector::pickAssignment($module->assignments);
+            if ($assignment) {
                 $sub = $assignment->submissions->first();
                 if ($sub) {
                     $total += (float) $sub->marks_obtained;
@@ -324,7 +399,9 @@ class CertificatesController extends Controller
                     $has = true;
                 }
             }
-            foreach ($module->quizzes as $quiz) {
+
+            $quiz = AiAssessmentSelector::pickQuiz($module->quizzes);
+            if ($quiz) {
                 $sub = $quiz->submissions->first();
                 if ($sub) {
                     $total += (float) $sub->marks_obtained;
@@ -332,7 +409,9 @@ class CertificatesController extends Controller
                     $has = true;
                 }
             }
-            foreach ($module->exams as $exam) {
+
+            $exam = AiAssessmentSelector::pickExam($module->exams);
+            if ($exam) {
                 $sub = $exam->submissions->first();
                 if ($sub) {
                     $total += (float) $sub->marks_obtained;
@@ -344,6 +423,8 @@ class CertificatesController extends Controller
             if (!$has) {
                 continue;
             }
+
+            $plan = $gradePlan[$course->id] ?? $gradePlan[(string) $course->id] ?? null;
 
             $moduleClassYear = $module->class_year;
             $yearName = $moduleClassYear->year_name ?? ($moduleClassYear->name ?? 'Year');
@@ -359,9 +440,14 @@ class CertificatesController extends Controller
             $yearKey = trim($yearName . ' — ' . $ayName);
 
             $marksOver20 = $max > 0 ? round(($total / $max) * 20, 2) : 0.0;
-            $percentage = $max > 0 ? round(($total / $max) * 100, 2) : 0.0;
+            $percentage = $plan
+                ? (float) ($plan['percentage'] ?? 0)
+                : ($max > 0 ? round(($total / $max) * 100, 2) : 0.0);
             $credits = CertificateGrades::resolveCourseCredits($course);
             $creditMax = round($credits * $marksOver20, 2);
+            $grades = $plan
+                ? ['gp' => (float) ($plan['gp'] ?? 0), 'gd' => (string) ($plan['gd'] ?? CertificateGrades::fromPercentage($percentage)['gd'])]
+                : CertificateGrades::fromPercentage($percentage);
 
             $courseKey = $course->code ?: ('course_' . $module->id);
 
@@ -373,6 +459,8 @@ class CertificatesController extends Controller
                 'credit_max'   => $creditMax,
                 'credit_marks' => $creditMax,
                 'percentage'   => $percentage,
+                'gp'           => $grades['gp'],
+                'gd'           => $grades['gd'],
                 'year_index'   => $yearIndex,
                 'semester'     => max(1, min(2, (int) ($module->semester ?: 1))),
             ];

@@ -210,8 +210,12 @@ class CertificatePresenter
         return 'S/N: ' . str_pad((string) $student->id, 12, '0', STR_PAD_LEFT);
     }
 
-    public static function completionYear(): string
+    public static function completionYear(?Student $student = null): string
     {
+        if ($student) {
+            return (string) TranscriptProfile::completionYear($student);
+        }
+
         return (string) now()->year;
     }
 

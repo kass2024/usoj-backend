@@ -2,6 +2,51 @@
 
 @section('css')
   @include('layouts.datatable.css-without-bottons')
+  <style>
+    #smart-progress-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.55);
+      z-index: 2000;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+    }
+    #smart-progress-overlay.show { display: flex; }
+    .smart-progress-card {
+      width: min(480px, 100%);
+      background: #fff;
+      border-radius: 12px;
+      padding: 1.25rem 1.5rem;
+      box-shadow: 0 20px 50px rgba(0,0,0,.2);
+    }
+    .smart-progress-bar {
+      height: 10px;
+      background: #e9ecef;
+      border-radius: 999px;
+      overflow: hidden;
+      margin-top: .75rem;
+    }
+    .smart-progress-bar > span {
+      display: block;
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #0d6efd, #20c997);
+      border-radius: 999px;
+      transition: width .35s ease;
+    }
+    .smart-progress-step {
+      font-size: .9rem;
+      color: #495057;
+      min-height: 1.25rem;
+    }
+    .smart-progress-meta {
+      font-size: .8rem;
+      color: #6c757d;
+      margin-top: .35rem;
+    }
+  </style>
 @endsection
 
 @section('body')
@@ -105,6 +150,18 @@
       {{-- Modal partial must contain a <form class="modal-form"> with a hidden #department_id --}}
       @include('courses.partials.modals')
     </div>
+  </div>
+</div>
+
+<div id="smart-progress-overlay" aria-hidden="true">
+  <div class="smart-progress-card" role="status" aria-live="polite">
+    <div class="d-flex justify-content-between align-items-center">
+      <strong id="smart-progress-title">Working…</strong>
+      <span class="badge bg-primary" id="smart-progress-percent">0%</span>
+    </div>
+    <div class="smart-progress-bar"><span id="smart-progress-fill"></span></div>
+    <div class="smart-progress-step mt-2" id="smart-progress-step">Starting…</div>
+    <div class="smart-progress-meta" id="smart-progress-meta"></div>
   </div>
 </div>
 @endsection
@@ -418,6 +475,68 @@
 
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
 
+    const SmartProgress = {
+      overlay: document.getElementById('smart-progress-overlay'),
+      titleEl: document.getElementById('smart-progress-title'),
+      percentEl: document.getElementById('smart-progress-percent'),
+      fillEl: document.getElementById('smart-progress-fill'),
+      stepEl: document.getElementById('smart-progress-step'),
+      metaEl: document.getElementById('smart-progress-meta'),
+      timer: null,
+      value: 0,
+      show(title) {
+        this.value = 0;
+        this.titleEl.textContent = title;
+        this.percentEl.textContent = '0%';
+        this.fillEl.style.width = '0%';
+        this.stepEl.textContent = 'Starting…';
+        this.metaEl.textContent = '';
+        this.overlay.classList.add('show');
+        this.overlay.setAttribute('aria-hidden', 'false');
+      },
+      hide() {
+        clearInterval(this.timer);
+        this.timer = null;
+        this.overlay.classList.remove('show');
+        this.overlay.setAttribute('aria-hidden', 'true');
+      },
+      set(percent, step, meta = '') {
+        this.value = Math.max(this.value, Math.min(100, percent));
+        this.percentEl.textContent = `${Math.round(this.value)}%`;
+        this.fillEl.style.width = `${this.value}%`;
+        if (step) this.stepEl.textContent = step;
+        if (meta) this.metaEl.textContent = meta;
+      },
+      animateTo(target, step, meta = '', ms = 900) {
+        const start = this.value;
+        const delta = target - start;
+        const started = performance.now();
+        clearInterval(this.timer);
+        this.timer = setInterval(() => {
+          const elapsed = performance.now() - started;
+          const ratio = Math.min(1, elapsed / ms);
+          const next = start + (delta * ratio);
+          this.set(next, step, meta);
+          if (ratio >= 1) {
+            clearInterval(this.timer);
+            this.timer = null;
+          }
+        }, 40);
+      },
+      async runStages(title, stages) {
+        this.show(title);
+        for (const stage of stages) {
+          if (stage.delay) await new Promise(r => setTimeout(r, stage.delay));
+          if (stage.animate) {
+            this.animateTo(stage.percent, stage.step, stage.meta || '', stage.ms || 900);
+            await new Promise(r => setTimeout(r, stage.ms || 900));
+          } else {
+            this.set(stage.percent, stage.step, stage.meta || '');
+          }
+        }
+      }
+    };
+
     $('#preview-courses-btn').on('click', async function(){
       const deptId = $('#departmentSelect').val();
       const levelId = $('#levelSelect').val();
@@ -428,10 +547,11 @@
         return;
       }
 
-      $('#preview-status').text('Analysing courses…');
+      $('#preview-status').text('');
       $('#preview-courses-btn').prop('disabled', true);
+      $('#import-courses-btn').prop('disabled', true);
 
-      try {
+      const analysePromise = (async () => {
         const res = await fetch(routes.bulkTextParse, {
           method: 'POST',
           headers: {
@@ -459,6 +579,21 @@
           throw new Error(data.message || 'Analysis failed');
         }
 
+        return data;
+      })();
+
+      try {
+        await SmartProgress.runStages('Analysing courses', [
+          { percent: 12, step: 'Reading pasted course list…', delay: 120 },
+          { percent: 35, step: 'Detecting programme structure…', animate: true, ms: 700 },
+          { percent: 58, step: 'Scheduling year and semester with AI…', animate: true, ms: 900 },
+          { percent: 78, step: 'Estimating credit units…', animate: true, ms: 700 },
+        ]);
+
+        const data = await analysePromise;
+
+        SmartProgress.set(100, 'Analysis complete', `${data.count} course(s) ready`);
+
         const rows = (data.courses || []).map((course, i) => `
           <tr>
             <td>${i + 1}</td>
@@ -476,6 +611,85 @@
       } catch (err) {
         $('#preview-status').text(err.message);
       } finally {
+        setTimeout(() => SmartProgress.hide(), 500);
+        $('#preview-courses-btn').prop('disabled', false);
+        $('#import-courses-btn').prop('disabled', false);
+      }
+    });
+
+    $('#bulk-text-form').on('submit', async function(e){
+      e.preventDefault();
+
+      const deptId = $('#departmentSelect').val();
+      const levelId = $('#levelSelect').val();
+      const courseText = $('#course_text').val().trim();
+
+      if (!deptId || !levelId || !courseText) {
+        $('#preview-status').text('Select department, level, and paste courses first.');
+        return;
+      }
+
+      $('#bulk_department_id').val(deptId);
+      $('#bulk_degree_level_id').val(levelId);
+      $('#import-courses-btn').prop('disabled', true);
+      $('#preview-courses-btn').prop('disabled', true);
+
+      try {
+        await SmartProgress.runStages('Importing all courses', [
+          { percent: 10, step: 'Validating course list…', delay: 120 },
+          { percent: 28, step: 'Preparing semester schedule…', animate: true, ms: 700 },
+          { percent: 48, step: 'Writing courses to database…', animate: true, ms: 900 },
+        ]);
+
+        const importPromise = fetch(routes.bulkTextImport, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'X-CSRF-TOKEN': csrfToken || '',
+            'X-Requested-With': 'XMLHttpRequest',
+          },
+          body: JSON.stringify({
+            department_id: deptId,
+            degree_level_id: levelId,
+            course_text: courseText,
+          }),
+        });
+
+        SmartProgress.animateTo(72, 'Saving course records…', '', 1000);
+        const res = await importPromise;
+        const data = await res.json().catch(() => ({}));
+
+        if (!res.ok) {
+          throw new Error(data.message || 'Import failed');
+        }
+
+        SmartProgress.set(100, 'Import complete', data.message || 'Courses imported');
+
+        const did = $('#departmentSelect').val();
+        const lid = $('#levelSelect').val();
+        if (typeof loadCourses === 'function' && did && lid) {
+          loadCourses(did, lid);
+        }
+
+        setTimeout(() => {
+          SmartProgress.hide();
+          bootstrap.Modal.getInstance(document.getElementById('bulkTextModal'))?.hide();
+          $('#preview-wrap').addClass('d-none');
+          $('#preview-body').empty();
+          $('#preview-status').text('');
+          $('#course_text').val('');
+
+          const alert = document.createElement('div');
+          alert.className = 'alert alert-success alert-dismissible fade show';
+          alert.innerHTML = `${data.message || 'Courses imported successfully.'}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>`;
+          document.querySelector('#List .card-body')?.prepend(alert);
+        }, 700);
+      } catch (err) {
+        SmartProgress.hide();
+        $('#preview-status').text(err.message);
+      } finally {
+        $('#import-courses-btn').prop('disabled', false);
         $('#preview-courses-btn').prop('disabled', false);
       }
     });

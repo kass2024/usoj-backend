@@ -90,7 +90,7 @@
 
       {{-- Create/Edit Modal --}}
       <div class="modal fade" id="showModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-md modal-dialog-centered">
+        <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
           <div class="modal-content">
             <div class="modal-header bg-light p-3">
               <h5 class="modal-title" id="exampleModalLabel"></h5>
@@ -161,6 +161,41 @@
                          accept="image/jpeg,image/png,image/jpg">
                   <div class="form-text">Optional. Used on transcript and degree certificates.</div>
                   @error('profile_img') <span class="text-danger">{{ $message }}</span> @enderror
+                </div>
+
+                <hr class="my-3">
+                <h6 class="text-muted mb-3">Transcript profile</h6>
+                <p class="small text-muted mb-3">Gender and date of birth are required before generating an academic transcript.</p>
+
+                <div class="row mb-3">
+                  <div class="col-md-6">
+                    <label for="gender" class="form-label">Gender</label>
+                    <select class="form-select" name="gender" id="gender">
+                      <option value="">Select gender</option>
+                      <option value="MALE" {{ old('gender') == 'MALE' ? 'selected' : '' }}>Male</option>
+                      <option value="FEMALE" {{ old('gender') == 'FEMALE' ? 'selected' : '' }}>Female</option>
+                      <option value="OTHER" {{ old('gender') == 'OTHER' ? 'selected' : '' }}>Other</option>
+                    </select>
+                    @error('gender') <span class="text-danger">{{ $message }}</span> @enderror
+                  </div>
+                  <div class="col-md-6">
+                    <label for="date_of_birth" class="form-label">Date of Birth</label>
+                    <input type="date" name="date_of_birth" value="{{ old('date_of_birth') }}" id="date_of_birth" class="form-control" max="{{ date('Y-m-d') }}"/>
+                    @error('date_of_birth') <span class="text-danger">{{ $message }}</span> @enderror
+                  </div>
+                </div>
+
+                <div class="row mb-3">
+                  <div class="col-md-12">
+                    <label class="form-label">Nationality</label>
+                    <input type="text" name="nationality" value="{{ old('nationality') }}" id="nationality" class="form-control" placeholder="e.g. UGANDAN"/>
+                    @error('nationality') <span class="text-danger">{{ $message }}</span> @enderror
+                  </div>
+                </div>
+
+                <div class="alert alert-light border small mb-0">
+                  <strong>Completion year</strong> is calculated automatically from the registration number and degree level
+                  (admission year + programme duration).
                 </div>
 
                 <div class="small text-muted">
@@ -271,6 +306,10 @@
                      data-status="${c.status || ''}"
                      data-email="${esc(c.email || '')}"
                      data-phone="${esc(c.phone || '')}"
+                     data-gender="${esc(c.gender || '')}"
+                     data-date-of-birth="${esc(c.date_of_birth || '')}"
+                     data-nationality="${esc(c.nationality || '')}"
+                     data-completion-year="${esc(c.completion_year || '')}"
                      data-profile-img="${esc(c.profile_img_url || '{{ asset('images/profile.jpg') }}')}"
                      data-action="${routes.studentUpdate(c.id)}">
                     <i class="ri-pencil-fill fs-16"></i>
@@ -497,6 +536,9 @@
         $('#email').val('');
         $('#phone').val('');
         $('#status-field').val('active');
+        $('#gender').val('');
+        $('#date_of_birth').val('');
+        $('#nationality').val('');
         $('#profile_img').val('');
         setPhotoPreview(defaultPhoto);
 
@@ -524,6 +566,9 @@
         $('#email').val($(this).data('email'));
         $('#phone').val($(this).data('phone'));
         $('#status-field').val($(this).data('status'));
+        $('#gender').val($(this).data('gender') || '');
+        $('#date_of_birth').val($(this).data('date-of-birth') || '');
+        $('#nationality').val($(this).data('nationality') || '');
         $('#profile_img').val('');
         setPhotoPreview($(this).data('profile-img'));
 

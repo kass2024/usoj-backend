@@ -17,6 +17,7 @@ use App\Models\Quiz;
 use App\Models\Student;
 use App\Models\Submission;
 use App\Models\User;
+use App\Support\AiAssessmentSelector;
 use App\Support\CertificateGrades;
 use App\Support\ProgramDuration;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -76,7 +77,7 @@ class TranscriptAiStudioService
     public function buildCourseGradePlan(float $targetCgpa, Collection $schedule, int $studentId): array
     {
         $entries = [];
-        $palette = CertificateGrades::gradePointPalette();
+        $palette = CertificateGrades::gradePointPaletteForTarget($targetCgpa);
 
         foreach ($schedule as $index => $entry) {
             $course = $entry['course'];
@@ -108,6 +109,7 @@ class TranscriptAiStudioService
             $split = CertificateGrades::marksSplitForGp($gps[$i]);
             $plan[$entry['course_id']] = [
                 'gp' => $split['gp'],
+                'gd' => CertificateGrades::fromPercentage($split['percentage'])['gd'],
                 'percentage' => $split['percentage'],
                 'marks' => [
                     'assignment' => $split['assignment'],
@@ -282,7 +284,7 @@ class TranscriptAiStudioService
         float $targetCgpa,
         Collection $schedule,
         array $gradePlan
-    ): void {
+    ): array {
         $targetCgpa = round($targetCgpa, 2);
         $steps = CertificateGrades::gpSteps();
 
@@ -290,7 +292,7 @@ class TranscriptAiStudioService
             $achieved = round($this->previewCgpa($student), 2);
 
             if ($achieved === $targetCgpa) {
-                return;
+                return $gradePlan;
             }
 
             $diff = $targetCgpa - $achieved;
@@ -326,6 +328,7 @@ class TranscriptAiStudioService
                     $split = CertificateGrades::marksSplitForGp($newGp);
                     $gradePlan[$course->id] = [
                         'gp' => $split['gp'],
+                        'gd' => CertificateGrades::fromPercentage($split['percentage'])['gd'],
                         'percentage' => $split['percentage'],
                         'marks' => [
                             'assignment' => $split['assignment'],
@@ -342,6 +345,8 @@ class TranscriptAiStudioService
                 break;
             }
         }
+
+        return $gradePlan;
     }
 
     private function applyGradePlanToCourseSubmissions(Student $student, int $courseId, float $gp): bool
@@ -363,25 +368,28 @@ class TranscriptAiStudioService
         }
 
         $updated = false;
+        $assignment = AiAssessmentSelector::pickAssignment($module->assignments);
+        $quiz = AiAssessmentSelector::pickQuiz($module->quizzes);
+        $exam = AiAssessmentSelector::pickExam($module->exams);
 
-        foreach ($module->assignments as $assessment) {
-            $sub = $assessment->submissions->firstWhere('student_id', $student->id);
+        if ($assignment) {
+            $sub = $assignment->submissions->firstWhere('student_id', $student->id);
             if ($sub) {
                 $sub->update(['marks_obtained' => $split['assignment']]);
                 $updated = true;
             }
         }
 
-        foreach ($module->quizzes as $assessment) {
-            $sub = $assessment->submissions->firstWhere('student_id', $student->id);
+        if ($quiz) {
+            $sub = $quiz->submissions->firstWhere('student_id', $student->id);
             if ($sub) {
                 $sub->update(['marks_obtained' => $split['quiz']]);
                 $updated = true;
             }
         }
 
-        foreach ($module->exams as $assessment) {
-            $sub = $assessment->submissions->firstWhere('student_id', $student->id);
+        if ($exam) {
+            $sub = $exam->submissions->firstWhere('student_id', $student->id);
             if ($sub) {
                 $sub->update(['marks_obtained' => $split['exam']]);
                 $updated = true;
@@ -618,13 +626,14 @@ class TranscriptAiStudioService
                 }
             }
 
-            $this->rebalanceSubmissionsToTargetCgpa($student, $targetCgpa, $schedule, $courseGradePlan);
+            $courseGradePlan = $this->rebalanceSubmissionsToTargetCgpa($student, $targetCgpa, $schedule, $courseGradePlan);
 
             $run->setStepStatus('finalize', 'active', 'Calculating final CGPA');
             $achieved = $this->previewCgpa($student);
             $run->update([
                 'status' => 'completed',
                 'achieved_cgpa' => round($achieved, 2),
+                'options' => array_merge($options, ['grade_plan' => $courseGradePlan]),
             ]);
             $run->setStepStatus('finalize', 'done', 'Transcript fill completed');
             $run->appendLog(
@@ -1427,45 +1436,48 @@ PROMPT;
         $rows = [];
         $courseId = (int) ($module->course_id ?? 0);
 
-        foreach ($module->assignments as $assessment) {
+        $assignment = AiAssessmentSelector::pickAssignment($module->assignments);
+        if ($assignment) {
             $rows[] = $this->botSubmissionRow(
                 $student->id,
                 'assignment',
-                $assessment->id,
+                $assignment->id,
                 null,
                 null,
                 $coursePercent,
-                $assessment->questions,
+                $assignment->questions,
                 $now,
                 $courseId,
                 $exactMarks['assignment'] ?? null
             );
         }
 
-        foreach ($module->quizzes as $assessment) {
+        $quiz = AiAssessmentSelector::pickQuiz($module->quizzes);
+        if ($quiz) {
             $rows[] = $this->botSubmissionRow(
                 $student->id,
                 'quiz',
                 null,
-                $assessment->id,
+                $quiz->id,
                 null,
                 $coursePercent,
-                $assessment->questions,
+                $quiz->questions,
                 $now,
                 $courseId,
                 $exactMarks['quiz'] ?? null
             );
         }
 
-        foreach ($module->exams as $assessment) {
+        $exam = AiAssessmentSelector::pickExam($module->exams);
+        if ($exam) {
             $rows[] = $this->botSubmissionRow(
                 $student->id,
                 'exam',
                 null,
                 null,
-                $assessment->id,
+                $exam->id,
                 $coursePercent,
-                $assessment->questions,
+                $exam->questions,
                 $now,
                 $courseId,
                 $exactMarks['exam'] ?? null

@@ -27,7 +27,11 @@ class Student extends Authenticatable
         'status',
         'department_id',
         'degree_level_id',
-        'profile_img'
+        'profile_img',
+        'gender',
+        'date_of_birth',
+        'nationality',
+        'completion_year',
     ];
 
     public function externalDocuments()
@@ -70,6 +74,8 @@ class Student extends Authenticatable
      */
     protected $casts = [
         'email_verified_at' => 'datetime',
+        'date_of_birth' => 'date',
+        'completion_year' => 'integer',
     ];
     public function courses()
     {

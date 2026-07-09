@@ -6,6 +6,7 @@ use App\Models\Program;
 use App\Models\School;
 use App\Models\Department;
 use App\Models\DegreeLevel;
+use App\Support\StudentCompletionYear;
 
 class StudentCreateController extends Controller
 {
@@ -82,7 +83,10 @@ class StudentCreateController extends Controller
                 $q->where('degree_level_id', $degreeLevelId);
             }
 
-            $rows = $q->get(['id','reg_number','fname','lname','email','phone','status','degree_level_id','profile_img'])
+            $rows = $q->get([
+                'id', 'reg_number', 'fname', 'lname', 'email', 'phone', 'status',
+                'degree_level_id', 'profile_img', 'gender', 'date_of_birth', 'nationality', 'completion_year',
+            ])
                 ->map(function ($s) {
                     return [
                         'id'         => $s->id,
@@ -93,6 +97,10 @@ class StudentCreateController extends Controller
                         'status'     => $s->status,
                         'level'      => optional($s->degreeLevel)->name,
                         'profile_img_url' => \App\Support\StudentPhoto::url($s),
+                        'gender' => $s->gender,
+                        'date_of_birth' => $s->date_of_birth?->format('Y-m-d'),
+                        'nationality' => $s->nationality,
+                        'completion_year' => StudentCompletionYear::resolve($s),
                     ];
                 });
 

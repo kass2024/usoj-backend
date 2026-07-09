@@ -20,6 +20,8 @@ Route::controller(CertificatesController::class)
         Route::post('/{id}/photo', 'uploadPhoto')->name('photo');
         Route::delete('/{id}/photo', 'deletePhoto')->name('photo.delete');
         Route::post('/{id}/email', 'emailDocuments')->name('email');
+        Route::get('/{id}/transcript-readiness', 'transcriptReadiness')->name('transcript.readiness');
+        Route::post('/{id}/transcript-profile', 'updateTranscriptProfile')->name('transcript.profile');
         Route::get('/{id}/transcript', 'generateTranscript')->name('transcript');
         Route::get('/{id}/degree', 'generateDegree')->name('degree');
         Route::get('/{id}/external-transcript', 'viewExternalTranscript')->name('external.transcript');

@@ -34,6 +34,63 @@
     </div>
 </div>
 
+@isset($student)
+    @php
+        $transcriptReady = \App\Support\TranscriptProfile::isReady($student);
+        $missingProfile = \App\Support\TranscriptProfile::missingFields($student);
+        $pdfUnlocked = ($aiFillCompleted ?? false) && $transcriptReady;
+    @endphp
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body py-3">
+                    <div class="ai-workflow d-flex flex-wrap align-items-center justify-content-between gap-3">
+                        <div class="ai-workflow-step {{ $student ? 'is-done' : 'is-active' }}">
+                            <span class="ai-workflow-icon">1</span>
+                            <div>
+                                <div class="fw-semibold">Find student</div>
+                                <div class="small text-muted">{{ $student->reg_number }}</div>
+                            </div>
+                        </div>
+                        <div class="ai-workflow-arrow d-none d-md-block">→</div>
+                        <div class="ai-workflow-step {{ ($aiFillCompleted ?? false) ? 'is-done' : (($activeAiRun ?? null) ? 'is-active' : 'is-pending') }}" id="workflow-step-ai">
+                            <span class="ai-workflow-icon">2</span>
+                            <div>
+                                <div class="fw-semibold">Run AI fill</div>
+                                <div class="small text-muted" id="workflow-ai-hint">
+                                    @if ($aiFillCompleted ?? false)
+                                        Materials, quizzes &amp; marks ready
+                                    @elseif ($activeAiRun ?? null)
+                                        Running now…
+                                    @else
+                                        Auto materials, quizzes, marking
+                                    @endif
+                                </div>
+                            </div>
+                        </div>
+                        <div class="ai-workflow-arrow d-none d-md-block">→</div>
+                        <div class="ai-workflow-step {{ $pdfUnlocked ? 'is-done' : 'is-pending' }}" id="workflow-step-pdf">
+                            <span class="ai-workflow-icon">3</span>
+                            <div>
+                                <div class="fw-semibold">Generate PDF</div>
+                                <div class="small text-muted" id="workflow-pdf-hint">
+                                    @if ($pdfUnlocked)
+                                        Transcript ready to download
+                                    @elseif (!($aiFillCompleted ?? false))
+                                        Unlocks after AI fill completes
+                                    @else
+                                        Complete gender &amp; date of birth
+                                    @endif
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+@endisset
+
 <div class="row g-4">
     <div class="col-lg-5">
         <div class="card shadow-sm h-100">
@@ -56,6 +113,10 @@
                     <div class="border rounded p-3 bg-light">
                         <h6 class="mb-2">{{ $student->fname }} {{ $student->lname }}</h6>
                         <p class="mb-1 small"><strong>Reg:</strong> {{ $student->reg_number }}</p>
+                        <p class="mb-1 small"><strong>Gender:</strong> {{ \App\Support\TranscriptProfile::genderLabel($student) }}</p>
+                        <p class="mb-1 small"><strong>Date of Birth:</strong> {{ \App\Support\TranscriptProfile::dateOfBirthFormatted($student) }}</p>
+                        <p class="mb-1 small"><strong>Nationality:</strong> {{ \App\Support\TranscriptProfile::nationality($student) }}</p>
+                        <p class="mb-1 small"><strong>Completion Year:</strong> {{ \App\Support\TranscriptProfile::completionYear($student) }} <span class="text-muted">(auto)</span></p>
                         @if ($student->department)
                             <p class="mb-1 small text-muted">{{ $student->department->name }}</p>
                         @endif
@@ -87,10 +148,52 @@
                             </div>
                         @endif
                         @if ($student)
-                            <div class="mt-3">
-                                <a href="{{ route('ai-transcript-studio.transcript', $student) }}" target="_blank" class="btn btn-outline-primary btn-sm">
-                                    <i class="ri-file-pdf-line"></i> Generate Transcript PDF
-                                </a>
+                            <div class="mt-3 border-top pt-3" id="transcript-pdf-panel"
+                                 data-transcript-url="{{ route('ai-transcript-studio.transcript', $student) }}"
+                                 data-profile-ready="{{ $transcriptReady ? '1' : '0' }}"
+                                 data-ai-completed="{{ ($aiFillCompleted ?? false) ? '1' : '0' }}">
+                                <div class="fw-semibold mb-2">3. Transcript PDF</div>
+
+                                @if ($completedAiRun ?? null)
+                                    <div class="small mb-2" id="ai-run-summary">
+                                        <span class="badge bg-success-subtle text-success me-1">AI done</span>
+                                        {{ $completedAiRun->courses_processed }} courses ·
+                                        {{ $completedAiRun->materials_created }} PDFs ·
+                                        {{ $completedAiRun->questions_saved }} questions ·
+                                        {{ $completedAiRun->submissions_created }} marks
+                                        @if ($completedAiRun->achieved_cgpa)
+                                            · CGPA {{ number_format($completedAiRun->achieved_cgpa, 2) }}
+                                        @endif
+                                    </div>
+                                @else
+                                    <div class="small text-muted mb-2" id="ai-run-summary">
+                                        Run <strong>AI Transcript Fill</strong> on the right to unlock the PDF.
+                                    </div>
+                                @endif
+
+                                <div id="transcript-pdf-actions">
+                                    @if ($pdfUnlocked)
+                                        <a href="{{ route('ai-transcript-studio.transcript', $student) }}" target="_blank"
+                                           class="btn btn-primary btn-sm w-100" id="transcript-pdf-btn">
+                                            <i class="ri-file-pdf-line"></i> Generate Transcript PDF
+                                        </a>
+                                    @elseif ($aiFillCompleted ?? false)
+                                        <button type="button" class="btn btn-primary btn-sm w-100" id="transcript-pdf-btn"
+                                                data-bs-toggle="modal" data-bs-target="#aiTranscriptProfileModal">
+                                            <i class="ri-file-pdf-line"></i> Complete profile &amp; generate PDF
+                                        </button>
+                                        <div class="small text-warning mt-2">
+                                            Missing: {{ \App\Support\TranscriptProfile::missingFieldsLabel($student) }}
+                                        </div>
+                                    @else
+                                        <button type="button" class="btn btn-secondary btn-sm w-100" id="transcript-pdf-btn" disabled>
+                                            <i class="ri-lock-line"></i> Generate Transcript PDF
+                                        </button>
+                                        <div class="small text-muted mt-2" id="transcript-pdf-hint">
+                                            Locked until AI fill completes successfully.
+                                        </div>
+                                    @endif
+                                </div>
                             </div>
                         @endif
                     </div>
@@ -221,7 +324,7 @@
     </div>
 </div>
 
-@if ($lastRun && session('last_run_id') == $lastRun->id)
+@if ($lastRun && session('last_run_id') == $lastRun->id && $lastRun->status === 'completed')
     <div class="row mt-4">
         <div class="col-12">
             <div class="card shadow-sm border-success">
@@ -238,12 +341,16 @@
                         <div class="col-md-2"><div class="fs-4 fw-bold">{{ $lastRun->target_cgpa }}</div><small>Est. CGPA</small></div>
                         <div class="col-md-2"><div class="fs-4 fw-bold text-success">{{ $lastRun->achieved_cgpa }}</div><small>Achieved</small></div>
                     </div>
-                    @if ($student)
+                    @if ($student && $transcriptReady)
                         <a href="{{ route('ai-transcript-studio.transcript', $student) }}" target="_blank" class="btn btn-primary">
                             <i class="ri-file-pdf-line"></i> Generate Transcript PDF
                         </a>
-                        <a href="{{ route('ai-transcript-studio.run.show', $lastRun) }}" class="btn btn-outline-secondary">View full log</a>
+                    @elseif ($student)
+                        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#aiTranscriptProfileModal">
+                            <i class="ri-file-pdf-line"></i> Complete profile &amp; generate PDF
+                        </button>
                     @endif
+                    <a href="{{ route('ai-transcript-studio.run.show', $lastRun) }}" class="btn btn-outline-secondary">View full log</a>
                 </div>
             </div>
         </div>
@@ -355,15 +462,73 @@
         </div>
 
         <div class="mt-3 d-none" id="ai-done-actions">
-            @isset($student)
-            <a href="{{ route('ai-transcript-studio.transcript', $student) }}" target="_blank" class="btn btn-primary btn-sm me-2">
-                <i class="ri-file-pdf-line"></i> Generate Transcript PDF
-            </a>
-            @endisset
+            <div id="ai-overlay-pdf-wrap" class="d-none">
+                <a href="#" target="_blank" class="btn btn-primary btn-sm me-2" id="ai-overlay-pdf-btn">
+                    <i class="ri-file-pdf-line"></i> Generate Transcript PDF
+                </a>
+            </div>
             <button type="button" class="btn btn-outline-secondary btn-sm" id="ai-close-overlay">Close</button>
         </div>
     </div>
 </div>
+
+@isset($student)
+<div class="modal fade" id="aiTranscriptProfileModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <form class="modal-content" method="POST" action="{{ route('certificates.transcript.profile', encrypt($student->id)) }}">
+            @csrf
+            <input type="hidden" name="generate_after" value="1">
+            <div class="modal-header">
+                <h5 class="modal-title">Complete transcript profile</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="small text-muted">Gender and date of birth are required before generating the official USJ transcript.</p>
+                <div class="mb-3">
+                    <label class="form-label">Gender <span class="text-danger">*</span></label>
+                    <select name="gender" class="form-select" required>
+                        <option value="">Select gender</option>
+                        <option value="MALE" @selected(strtoupper((string) $student->gender) === 'MALE')>Male</option>
+                        <option value="FEMALE" @selected(strtoupper((string) $student->gender) === 'FEMALE')>Female</option>
+                        <option value="OTHER" @selected(strtoupper((string) $student->gender) === 'OTHER')>Other</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Date of Birth <span class="text-danger">*</span></label>
+                    <input type="date" name="date_of_birth" class="form-control" max="{{ date('Y-m-d') }}"
+                           value="{{ $student->date_of_birth?->format('Y-m-d') }}" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Nationality</label>
+                    <input type="text" name="nationality" class="form-control"
+                           value="{{ $student->nationality }}" placeholder="e.g. UGANDAN">
+                </div>
+                <div class="mb-0">
+                    <div class="small text-muted">
+                        Completion year is calculated automatically:
+                        {{ \App\Support\StudentCompletionYear::explanation($student) }}
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn btn-primary">Save &amp; generate transcript</button>
+            </div>
+        </form>
+    </div>
+</div>
+@endisset
+
+@if (isset($student) && session('transcript_profile_required'))
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const modal = document.getElementById('aiTranscriptProfileModal');
+        if (modal) {
+            bootstrap.Modal.getOrCreateInstance(modal).show();
+        }
+    });
+</script>
+@endif
 
 <style>
     .ai-overlay {
@@ -420,6 +585,54 @@
     .ai-event-fallback { color: #e65100; }
     .ai-event-info { color: #455a64; }
     @keyframes spin { to { transform: rotate(360deg); } }
+    .ai-workflow-step {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 14px;
+        border-radius: 12px;
+        border: 1px solid #e9ecef;
+        background: #fff;
+        min-width: 220px;
+        flex: 1;
+    }
+    .ai-workflow-step.is-done {
+        border-color: #a3cfbb;
+        background: #f0fff4;
+    }
+    .ai-workflow-step.is-active {
+        border-color: #9ec5fe;
+        background: #e7f1ff;
+        box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.12);
+    }
+    .ai-workflow-step.is-pending {
+        opacity: 0.72;
+    }
+    .ai-workflow-icon {
+        width: 34px;
+        height: 34px;
+        border-radius: 50%;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        background: #e9ecef;
+        color: #495057;
+        flex-shrink: 0;
+    }
+    .ai-workflow-step.is-done .ai-workflow-icon {
+        background: #198754;
+        color: #fff;
+    }
+    .ai-workflow-step.is-active .ai-workflow-icon {
+        background: #0d6efd;
+        color: #fff;
+    }
+    .ai-workflow-arrow {
+        color: #adb5bd;
+        font-size: 1.25rem;
+        font-weight: 700;
+    }
 </style>
 
 <script>
@@ -504,10 +717,97 @@
     const runBtn = document.getElementById('ai-run-btn');
     const stopWrap = document.getElementById('ai-stop-wrap');
     const stopBtn = document.getElementById('ai-stop-btn');
+    const transcriptPdfPanel = document.getElementById('transcript-pdf-panel');
+    const transcriptPdfActions = document.getElementById('transcript-pdf-actions');
+    const aiRunSummary = document.getElementById('ai-run-summary');
+    const workflowStepAi = document.getElementById('workflow-step-ai');
+    const workflowStepPdf = document.getElementById('workflow-step-pdf');
+    const workflowAiHint = document.getElementById('workflow-ai-hint');
+    const workflowPdfHint = document.getElementById('workflow-pdf-hint');
+    const overlayPdfWrap = document.getElementById('ai-overlay-pdf-wrap');
+    const overlayPdfBtn = document.getElementById('ai-overlay-pdf-btn');
     let activeCancelUrl = null;
     let stopRequested = false;
 
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+    const profileReady = transcriptPdfPanel?.dataset.profileReady === '1';
+
+    function setWorkflowStep(el, state) {
+        if (!el) return;
+        el.classList.remove('is-done', 'is-active', 'is-pending');
+        el.classList.add(state);
+    }
+
+    function renderAiSummary(data) {
+        if (!aiRunSummary) return;
+        const parts = [
+            '<span class="badge bg-success-subtle text-success me-1">AI done</span>',
+            `${data.courses_processed || 0} courses`,
+            `${data.materials_created || 0} PDFs`,
+            `${data.questions_saved || 0} questions`,
+            `${data.submissions_created || 0} marks`,
+        ];
+        if (data.achieved_cgpa) {
+            parts.push(`CGPA ${Number(data.achieved_cgpa).toFixed(2)}`);
+        }
+        aiRunSummary.innerHTML = parts.join(' · ');
+        aiRunSummary.classList.remove('text-muted');
+    }
+
+    function unlockTranscriptPdf(data) {
+        if (transcriptPdfPanel) {
+            transcriptPdfPanel.dataset.aiCompleted = '1';
+        }
+
+        setWorkflowStep(workflowStepAi, 'is-done');
+        if (workflowAiHint) {
+            workflowAiHint.textContent = 'Materials, quizzes & marks ready';
+        }
+
+        renderAiSummary(data || {});
+
+        if (profileReady) {
+            setWorkflowStep(workflowStepPdf, 'is-done');
+            if (workflowPdfHint) {
+                workflowPdfHint.textContent = 'Transcript ready to download';
+            }
+            if (transcriptPdfActions && transcriptPdfPanel) {
+                const url = transcriptPdfPanel.dataset.transcriptUrl;
+                transcriptPdfActions.innerHTML = `
+                    <a href="${url}" target="_blank" class="btn btn-primary btn-sm w-100" id="transcript-pdf-btn">
+                        <i class="ri-file-pdf-line"></i> Generate Transcript PDF
+                    </a>`;
+            }
+            if (overlayPdfWrap && overlayPdfBtn && transcriptPdfPanel) {
+                overlayPdfBtn.href = transcriptPdfPanel.dataset.transcriptUrl;
+                overlayPdfWrap.classList.remove('d-none');
+            }
+        } else {
+            setWorkflowStep(workflowStepPdf, 'is-pending');
+            if (workflowPdfHint) {
+                workflowPdfHint.textContent = 'Complete gender & date of birth';
+            }
+            if (transcriptPdfActions) {
+                transcriptPdfActions.innerHTML = `
+                    <button type="button" class="btn btn-primary btn-sm w-100" id="transcript-pdf-btn"
+                            data-bs-toggle="modal" data-bs-target="#aiTranscriptProfileModal">
+                        <i class="ri-file-pdf-line"></i> Complete profile &amp; generate PDF
+                    </button>
+                    <div class="small text-warning mt-2">Add gender and date of birth to unlock the PDF.</div>`;
+            }
+        }
+    }
+
+    function markAiRunning() {
+        setWorkflowStep(workflowStepAi, 'is-active');
+        if (workflowAiHint) {
+            workflowAiHint.textContent = 'Running now…';
+        }
+        setWorkflowStep(workflowStepPdf, 'is-pending');
+        if (workflowPdfHint) {
+            workflowPdfHint.textContent = 'Unlocks after AI fill completes';
+        }
+    }
 
     const stepMarkers = {
         pending: '○',
@@ -567,18 +867,26 @@
             doneActions.classList.remove('d-none');
 
             if (data.status === 'completed') {
-                statusText.textContent = `Done! Achieved CGPA: ${data.achieved_cgpa}`;
+                statusText.textContent = `Done! Achieved CGPA: ${data.achieved_cgpa ?? '—'}`;
                 progressBar.classList.remove('progress-bar-animated');
-                setTimeout(() => window.location.reload(), 3000);
+                unlockTranscriptPdf(data);
             } else if (data.status === 'cancelled') {
                 statusText.textContent = 'Stopped by user.';
                 progressBar.classList.remove('progress-bar-animated');
                 progressBar.classList.remove('bg-success');
                 progressBar.classList.add('bg-warning');
+                setWorkflowStep(workflowStepAi, 'is-pending');
+                if (workflowAiHint) {
+                    workflowAiHint.textContent = 'Run AI fill to continue';
+                }
             } else {
                 statusText.textContent = 'Failed: ' + (data.error_message || 'Unknown error');
                 progressBar.classList.remove('bg-success');
                 progressBar.classList.add('bg-danger');
+                setWorkflowStep(workflowStepAi, 'is-pending');
+                if (workflowAiHint) {
+                    workflowAiHint.textContent = 'AI fill failed — try again';
+                }
             }
         };
 
@@ -658,7 +966,6 @@
     if (closeBtn && overlay) {
         closeBtn.addEventListener('click', () => {
             overlay.classList.remove('active');
-            window.location.reload();
         });
     }
 
@@ -668,6 +975,7 @@
             overlay.classList.add('active');
             runBtn.disabled = true;
             doneActions.classList.add('d-none');
+            overlayPdfWrap?.classList.add('d-none');
             stopWrap.classList.add('d-none');
             stopBtn.disabled = false;
             stopRequested = false;
@@ -679,6 +987,7 @@
             statusText.textContent = 'Submitting AI run…';
             stepsList.innerHTML = '<p class="text-muted small mb-0 text-center py-2">Initializing…</p>';
             eventsInner.innerHTML = '<span class="text-muted">Waiting for API events…</span>';
+            markAiRunning();
 
             const formData = new FormData(form);
 
@@ -711,5 +1020,14 @@
             }
         });
     }
+
+    @if (!empty($activeAiRun))
+    if (overlay) {
+        overlay.classList.add('active');
+        if (runBtn) runBtn.disabled = true;
+        markAiRunning();
+        pollProgress(@json(route('ai-transcript-studio.run.progress', $activeAiRun)));
+    }
+    @endif
 </script>
 @endsection

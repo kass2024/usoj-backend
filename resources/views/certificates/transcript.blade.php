@@ -232,14 +232,14 @@
                     @if ($photo_data_uri)
                         <img src="{{ $photo_data_uri }}" alt="Student Photo">
                     @endif
-                    <div class="photo-id">{{ str_pad((string) $student->id, 10, '0', STR_PAD_LEFT) }}</div>
+                    <div class="photo-id">{{ $photo_id }}</div>
                 </td>
                 <td class="meta">
                     <div><b>REGISTRATION NO:</b> {{ strtoupper($student->reg_number) }}</div>
                     <div><b>NAME:</b> {{ $student_fullname }}</div>
-                    <div><b>GENDER:</b> N/A</div>
-                    <div><b>DATE OF BIRTH:</b> N/A</div>
-                    <div><b>NATIONALITY:</b> UGANDAN</div>
+                    <div><b>GENDER:</b> {{ $gender_label }}</div>
+                    <div><b>DATE OF BIRTH:</b> {{ $date_of_birth }}</div>
+                    <div><b>NATIONALITY:</b> {{ $nationality }}</div>
                     <div><b>FACULTY:</b> {{ $faculty }}</div>
                     <div><b>PROGRAM:</b> {{ $program }}</div>
                     <div><b>COMPLETION YEAR:</b> {{ $completion_year }}</div>

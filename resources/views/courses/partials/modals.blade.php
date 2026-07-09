@@ -140,7 +140,10 @@
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body">
-        Are you sure you want to delete this course?
+        <p>Are you sure you want to delete this course?</p>
+        <div class="alert alert-warning small mb-0">
+          <strong>Force delete:</strong> This will also remove any linked modules, lessons, assignments, quizzes, exams, and student marks for this course. This cannot be undone.
+        </div>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-ghost-secondary" data-bs-dismiss="modal">Cancel</button>

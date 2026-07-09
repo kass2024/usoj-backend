@@ -131,6 +131,54 @@
             </div>
         </div>
 
+        @if (!empty($assessmentResults))
+            <div class="card shadow-sm mt-4">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span>AI assessment marks &amp; transcript grades</span>
+                    <span class="badge bg-info">AI auto-marked</span>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-striped mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Course</th>
+                                    <th>Type</th>
+                                    <th>Assessment</th>
+                                    <th class="text-end">Score</th>
+                                    <th class="text-end">%</th>
+                                    <th class="text-end">GP</th>
+                                    <th class="text-center">GD</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach ($assessmentResults as $row)
+                                    <tr class="{{ !empty($row['is_summary']) ? 'table-primary fw-semibold' : '' }}">
+                                        <td>
+                                            <span class="text-muted small">{{ $row['course_code'] }}</span><br>
+                                            {{ Str::limit($row['course_name'], 40) }}
+                                        </td>
+                                        <td>{{ $row['assessment_type'] }}</td>
+                                        <td>{{ Str::limit($row['assessment_title'], 50) }}</td>
+                                        <td class="text-end">
+                                            {{ $row['marks_obtained'] }}/{{ $row['marks_max'] }}
+                                        </td>
+                                        <td class="text-end">{{ number_format($row['percentage'], 1) }}%</td>
+                                        <td class="text-end">{{ number_format($row['gp'], 2) }}</td>
+                                        <td class="text-center">{{ $row['gd'] }}</td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="p-3 small text-muted border-top">
+                        Each course uses one AI assignment (30), one AI quiz (30), and one AI exam (40).
+                        Transcript GP/GD are calibrated to the target CGPA you set before the run.
+                    </div>
+                </div>
+            </div>
+        @endif
+
         @if ($run->status === 'completed' && $run->student)
             <div class="mt-4">
                 <a href="{{ route('ai-transcript-studio.transcript', $run->student) }}" target="_blank" class="btn btn-success btn-lg">

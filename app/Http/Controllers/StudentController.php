@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Student;
+use App\Support\StudentCompletionYear;
 use Carbon\Carbon;
 use Barryvdh\DomPDF\Facade\Pdf;
 use App\Models\ClassYear;
@@ -46,6 +47,9 @@ class StudentController extends Controller
         'department_id' => 'required',
         'degree_level_id' => 'required',
         'profile_img' => 'nullable|image|mimes:jpg,jpeg,png|max:4096',
+        'gender' => 'nullable|in:MALE,FEMALE,OTHER,male,female,other',
+        'date_of_birth' => 'nullable|date|before:today',
+        'nationality' => 'nullable|string|max:80',
     ]);
 
     // ✅ Get the selected department
@@ -69,8 +73,9 @@ class StudentController extends Controller
     // ✅ Prepare student data
     $studentData = $request->merge([
         'password' => $hashedPassword,
-        'reg_number' => $regNumber
-    ])->except(['_token', 'profile_img']);
+        'reg_number' => $regNumber,
+        'gender' => $request->filled('gender') ? strtoupper($request->gender) : null,
+    ])->except(['_token', 'profile_img', 'date_created']);
 
     if ($request->hasFile('profile_img')) {
         $studentData['profile_img'] = $request->file('profile_img')->store('profile_images', 'public');
@@ -79,6 +84,7 @@ class StudentController extends Controller
     try {
         // ✅ Create student
         $student = Student::create($studentData);
+        StudentCompletionYear::syncToStudent($student)->save();
 
         // ✅ Generate Admission Letter PDF
         $pdf = PDF::loadView('emails.admission-letter', [
@@ -130,10 +136,17 @@ class StudentController extends Controller
             'phone' => 'required|unique:students,phone,' . $student->id,
             'status' => 'required',
             'profile_img' => 'nullable|image|mimes:jpg,jpeg,png|max:4096',
+            'gender' => 'nullable|in:MALE,FEMALE,OTHER,male,female,other',
+            'date_of_birth' => 'nullable|date|before:today',
+            'nationality' => 'nullable|string|max:80',
         ]);
 
         try {
-            $data = $request->except(['profile_img', '_token', '_method']);
+            $data = $request->except(['profile_img', '_token', '_method', 'completion_year']);
+
+            if ($request->filled('gender')) {
+                $data['gender'] = strtoupper($request->gender);
+            }
 
             if ($request->hasFile('profile_img')) {
                 if ($student->profile_img && Storage::disk('public')->exists($student->profile_img)) {
@@ -143,6 +156,7 @@ class StudentController extends Controller
             }
 
             $student->update($data);
+            StudentCompletionYear::syncToStudent($student->fresh())->save();
             return back()->with('message', 'Student update Succesfully');
         } catch (\Throwable $th) {
             return back()->with('error', $th->getMessage());

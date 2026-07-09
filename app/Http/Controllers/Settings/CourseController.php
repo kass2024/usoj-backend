@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Settings;
 use App\Http\Controllers\Controller;
 use App\Models\Course;
 use App\Models\Department;
+use App\Services\CourseForceDeleteService;
 use App\Services\CourseTextImportService;
 use App\Support\CourseDegreeLevelResolver;
 use App\Support\ProgramDuration;
@@ -53,14 +54,15 @@ class CourseController extends Controller
         }
     }
 
-    public function destroy(Course $course)
+    public function destroy(Course $course, CourseForceDeleteService $forceDelete)
     {
         try {
-            $course->delete();
+            $label = $course->code ?: $course->name;
+            $counts = $forceDelete->delete($course);
 
-            return back()->with('message', 'Courses deleted successfully');
+            return back()->with('message', $forceDelete->summaryMessage($label, $counts));
         } catch (\Throwable $th) {
-            return back()->with('error', $th->getMessage());
+            return back()->with('error', 'Could not delete course: '.$th->getMessage());
         }
     }
 
@@ -116,6 +118,17 @@ class CourseController extends Controller
             (int) $data['department_id'],
             (int) $data['degree_level_id']
         );
+
+        if ($request->expectsJson() || $request->ajax()) {
+            $status = ($result->created() === 0 && $result->updated() === 0) ? 422 : 200;
+
+            return response()->json([
+                'message' => $result->summaryMessage(),
+                'created' => $result->created(),
+                'updated' => $result->updated(),
+                'errors' => $result->errors(),
+            ], $status);
+        }
 
         if ($result->created() === 0 && $result->updated() === 0) {
             return back()

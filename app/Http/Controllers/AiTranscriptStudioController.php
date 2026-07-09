@@ -7,7 +7,9 @@ use App\Models\AiTranscriptRun;
 use App\Models\Student;
 use App\Services\GeminiAiService;
 use App\Services\TranscriptAiStudioService;
+use App\Support\AiAssessmentResults;
 use App\Support\CertificateGrades;
+use App\Support\TranscriptProfile;
 use App\Support\ProgramDuration;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -28,10 +30,20 @@ class AiTranscriptStudioController extends Controller
         $scheduleSummary = [];
         $targetScale = 'cgpa';
         $targetValue = 4.5;
+        $completedAiRun = null;
+        $activeAiRun = null;
+        $aiFillCompleted = false;
 
         if ($studentId = $request->session()->get('ai_studio_student_id')) {
             $student = Student::with(['department', 'degree_level'])->find($studentId);
             $lastRun = AiTranscriptRun::where('student_id', $studentId)->latest()->first();
+            $completedAiRun = $student
+                ? AiTranscriptRun::latestCompletedForStudent($student->id)
+                : null;
+            $activeAiRun = $student
+                ? AiTranscriptRun::activeForStudent($student->id)
+                : null;
+            $aiFillCompleted = $completedAiRun !== null;
 
             $targetScale = $request->input(
                 'target_scale',
@@ -82,7 +94,10 @@ class AiTranscriptStudioController extends Controller
             'scheduleSummary',
             'targetScale',
             'targetValue',
-            'gemini'
+            'gemini',
+            'completedAiRun',
+            'activeAiRun',
+            'aiFillCompleted',
         ));
     }
 
@@ -192,12 +207,31 @@ class AiTranscriptStudioController extends Controller
     {
         $run->load(['student.department', 'materials.course', 'questions.course', 'triggeredBy']);
 
-        return view('ai-transcript-studio.show-run', compact('run'));
+        $assessmentResults = $run->student
+            ? AiAssessmentResults::forRun($run->student, $run)
+            : [];
+
+        return view('ai-transcript-studio.show-run', compact('run', 'assessmentResults'));
     }
 
     public function generateTranscript(Student $student, CertificatesController $certificates)
     {
         $student->loadMissing(['department.school', 'degree_level']);
+
+        if (! TranscriptProfile::isReady($student)) {
+            return redirect()
+                ->route('ai-transcript-studio.index')
+                ->with('ai_studio_student_id', $student->id)
+                ->with('transcript_profile_required', true)
+                ->with('error', TranscriptProfile::readinessPayload($student)['message']);
+        }
+
+        if (! AiTranscriptRun::studentHasCompletedFill($student->id)) {
+            return redirect()
+                ->route('ai-transcript-studio.index')
+                ->with('ai_studio_student_id', $student->id)
+                ->with('error', 'Run AI Transcript Fill first to create materials, assessments, and marks before generating the PDF.');
+        }
 
         return $certificates->streamTranscriptPdf($student);
     }

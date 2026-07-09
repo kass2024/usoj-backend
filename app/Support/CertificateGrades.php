@@ -56,9 +56,31 @@ class CertificateGrades
     }
 
     /** @return array<float> */
+    public static function gradePointPaletteForTarget(float $targetCgpa): array
+    {
+        $steps = self::gpSteps();
+        $targetCgpa = self::snapGp($targetCgpa);
+        $targetIdx = array_search($targetCgpa, $steps, true);
+
+        if ($targetIdx === false) {
+            return $steps;
+        }
+
+        $palette = [];
+        foreach ([-3, -2, -1, 0, 1, 2, 3, -2, -1, 0, 1, 2, 0, -1, 1, 0, 2, -2, 1, -1, 0, 2, -1, 1, 0, -2] as $offset) {
+            $idx = $targetIdx + $offset;
+            if ($idx >= 0 && $idx < count($steps)) {
+                $palette[] = $steps[$idx];
+            }
+        }
+
+        return $palette !== [] ? $palette : $steps;
+    }
+
+    /** @return array<float> */
     public static function gradePointPalette(): array
     {
-        return [5.0, 4.5, 4.0, 3.5, 3.0, 2.5, 4.5, 4.0, 5.0, 3.5, 4.0, 4.5, 3.0, 3.5, 4.0, 2.5, 4.5, 5.0, 3.5, 4.0, 4.5, 3.0, 4.0, 3.5, 2.5, 3.0];
+        return self::gradePointPaletteForTarget(4.0);
     }
 
     /**
@@ -240,7 +262,11 @@ class CertificateGrades
 
                 $enriched = [];
                 foreach ($chunk as $course) {
-                    $grades = self::fromPercentage((float) ($course['percentage'] ?? 0));
+                    if (isset($course['gp'], $course['gd'])) {
+                        $grades = ['gp' => (float) $course['gp'], 'gd' => (string) $course['gd']];
+                    } else {
+                        $grades = self::fromPercentage((float) ($course['percentage'] ?? 0));
+                    }
                     $enriched[] = array_merge($course, $grades);
                 }
 

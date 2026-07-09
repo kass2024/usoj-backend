@@ -17,5 +17,11 @@ class Course extends Model
     {
         return $this->belongsTo(DegreeLevel::class, 'degree_level_id');
     }
+
+    public function modules()
+    {
+        return $this->hasMany(Modules::class, 'course_id');
+    }
+
     public function scopeActive($q){ return $q->where('status','active'); }
 }

@@ -59,6 +59,37 @@ class AiTranscriptRun extends Model
         return in_array($this->status, ['pending', 'running'], true);
     }
 
+    public function isCompleted(): bool
+    {
+        return $this->status === 'completed';
+    }
+
+    public static function latestCompletedForStudent(int $studentId): ?self
+    {
+        return static::query()
+            ->where('student_id', $studentId)
+            ->where('status', 'completed')
+            ->latest()
+            ->first();
+    }
+
+    public static function activeForStudent(int $studentId): ?self
+    {
+        return static::query()
+            ->where('student_id', $studentId)
+            ->whereIn('status', ['pending', 'running'])
+            ->latest()
+            ->first();
+    }
+
+    public static function studentHasCompletedFill(int $studentId): bool
+    {
+        return static::query()
+            ->where('student_id', $studentId)
+            ->where('status', 'completed')
+            ->exists();
+    }
+
     public function markCancelled(string $message = 'Cancelled by user.'): bool
     {
         if (!$this->isActive()) {
