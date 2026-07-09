@@ -1,14 +1,6 @@
-@extends('layouts.app')
-@section('body')
-<div class="row">
-    <div class="col-12">
-        @if (session('error'))
-            <div class="alert alert-danger">{{ session('error') }}</div>
-        @endif
-        @if (session('success'))
-            <div class="alert alert-success">{{ session('success') }}</div>
-        @endif
+@extends('ai-transcript-studio.layout')
 
+@section('studio_content')
         <div class="card border-0 shadow-sm mb-4" style="background: linear-gradient(135deg, #007a33 0%, #005a26 100%);">
             <div class="card-body text-white py-4">
                 <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
@@ -31,8 +23,6 @@
                 </div>
             </div>
         </div>
-    </div>
-</div>
 
 @isset($student)
     @php
@@ -530,6 +520,10 @@
 </script>
 @endif
 
+@endsection
+
+@section('css')
+@parent
 <style>
     .ai-overlay {
         position: fixed; inset: 0; background: rgba(0,40,20,.72);
@@ -634,7 +628,9 @@
         font-weight: 700;
     }
 </style>
+@endsection
 
+@section('js')
 <script>
     const scaleCgpa = document.getElementById('scale_cgpa');
     const scalePercentage = document.getElementById('scale_percentage');

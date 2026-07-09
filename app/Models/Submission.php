@@ -32,6 +32,11 @@ class Submission extends Model
         return $this->belongsTo(Exam::class);
     }
 
+    public function student()
+    {
+        return $this->belongsTo(Student::class);
+    }
+
 
     protected $casts = [
         'answers' => 'array',

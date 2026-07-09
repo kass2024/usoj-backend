@@ -1,7 +1,6 @@
-@extends('layouts.app')
-@section('body')
-<div class="row">
-    <div class="col-12">
+@extends('ai-transcript-studio.layout')
+
+@section('studio_content')
         <div class="d-flex justify-content-between align-items-center mb-3">
             <h4 class="mb-0">AI Run #{{ $run->id }}</h4>
             <div class="d-flex gap-2">
@@ -17,7 +16,10 @@
                     @method('DELETE')
                     <button type="submit" class="btn btn-outline-danger btn-sm">Delete</button>
                 </form>
-                <a href="{{ route('ai-transcript-studio.index') }}" class="btn btn-outline-secondary btn-sm">Back</a>
+                @if ($run->student)
+                    <a href="{{ route('ai-transcript-studio.marking.show', $run->student) }}" class="btn btn-outline-success btn-sm">Student marks</a>
+                @endif
+                <a href="{{ route('ai-transcript-studio.runs.index') }}" class="btn btn-outline-secondary btn-sm">Back</a>
             </div>
         </div>
 
@@ -186,6 +188,4 @@
                 </a>
             </div>
         @endif
-    </div>
-</div>
 @endsection

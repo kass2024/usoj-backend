@@ -12,6 +12,53 @@ use Illuminate\Support\Facades\DB;
 
 class CourseForceDeleteService
 {
+    /** @return array{modules: int, assignments: int, quizzes: int, exams: int, lessons: int, courses?: int} */
+    public function deleteAllInScope(int $departmentId, int $degreeLevelId): array
+    {
+        $totals = [
+            'courses' => 0,
+            'modules' => 0,
+            'assignments' => 0,
+            'quizzes' => 0,
+            'exams' => 0,
+            'lessons' => 0,
+        ];
+
+        $courses = Course::query()
+            ->where('department_id', $departmentId)
+            ->where('degree_level_id', $degreeLevelId)
+            ->orderBy('id')
+            ->get();
+
+        foreach ($courses as $course) {
+            $counts = $this->delete($course);
+            $totals['courses']++;
+            foreach (['modules', 'assignments', 'quizzes', 'exams', 'lessons'] as $key) {
+                $totals[$key] += $counts[$key];
+            }
+        }
+
+        return $totals;
+    }
+
+    public function bulkSummaryMessage(string $scopeLabel, array $counts): string
+    {
+        if (($counts['courses'] ?? 0) === 0) {
+            return 'No courses were found in this scope.';
+        }
+
+        return sprintf(
+            'Deleted %d course(s) in %s with %d module(s), %d assignment(s), %d quiz(zes), %d exam(s), and %d lesson(s).',
+            $counts['courses'],
+            $scopeLabel,
+            $counts['modules'],
+            $counts['assignments'],
+            $counts['quizzes'],
+            $counts['exams'],
+            $counts['lessons']
+        );
+    }
+
     /** @return array{modules: int, assignments: int, quizzes: int, exams: int, lessons: int} */
     public function delete(Course $course): array
     {

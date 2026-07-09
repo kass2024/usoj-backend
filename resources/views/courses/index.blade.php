@@ -46,6 +46,10 @@
       color: #6c757d;
       margin-top: .35rem;
     }
+    #delete-all-code {
+      letter-spacing: 0.35rem;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
   </style>
 @endsection
 
@@ -99,6 +103,10 @@
               <button type="button" class="btn btn-primary" id="create-btn"
                       data-bs-toggle="modal" data-bs-target="#bulkTextModal" disabled>
                 <i class="ri-add-line align-bottom me-1"></i> Add courses (AI)
+              </button>
+              <button type="button" class="btn btn-outline-danger" id="delete-all-btn"
+                      data-bs-toggle="modal" data-bs-target="#deleteAllCoursesModal" disabled>
+                <i class="ri-delete-bin-line align-bottom me-1"></i> Delete all in scope
               </button>
             </div>
           </div>
@@ -189,7 +197,9 @@
         `{{ route('settings.courses.update', ['course' => 'CID']) }}`.replace('CID', id),
       courseStore: `{{ route('settings.courses.store') }}`,
       bulkTextParse: `{{ route('courses.bulkTextParse') }}`,
-      bulkTextImport: `{{ route('courses.bulkTextImport') }}`
+      bulkTextImport: `{{ route('courses.bulkTextImport') }}`,
+      bulkDeleteChallenge: `{{ route('courses.bulkDeleteChallenge') }}`,
+      bulkDeleteAll: `{{ route('courses.bulkDeleteAll') }}`
     };
 
     // ---------- DATATABLE ----------
@@ -245,6 +255,7 @@
     }
     function setAddEnabled(ok){
       $('#create-btn').prop('disabled', !ok);
+      $('#delete-all-btn').prop('disabled', !ok);
     }
     function updateBulkModalContext(){
       const deptId = $('#departmentSelect').val() || '';
@@ -472,6 +483,77 @@
     $(document).on('click', '.remove-item-btn', function(){
       $('.delete-form').attr('action', routes.courseDestroy($(this).data('id')));
     });
+
+    const deleteAllModal = document.getElementById('deleteAllCoursesModal');
+    if (deleteAllModal) {
+      deleteAllModal.addEventListener('show.bs.modal', async function () {
+        const deptId = $('#departmentSelect').val();
+        const levelId = $('#levelSelect').val();
+        const $code = $('#delete-all-code');
+        const $hint = $('#delete-all-code-hint');
+        const $input = $('#confirmation_code');
+        const $submit = $('#delete-all-submit');
+
+        $('#delete_all_department_id').val(deptId || '');
+        $('#delete_all_degree_level_id').val(levelId || '');
+        $('#delete-all-scope').text(
+          [$('#departmentSelect option:selected').text(), $('#levelSelect option:selected').text()]
+            .filter(Boolean).join(' · ') || '—'
+        );
+
+        $code.text('------');
+        $hint.text('Generating code…');
+        $input.val('').prop('disabled', true);
+        $submit.prop('disabled', true);
+
+        if (!deptId || !levelId) {
+          $hint.text('Select department and degree level first.');
+          return;
+        }
+
+        try {
+          const response = await fetch(routes.bulkDeleteChallenge, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+              'X-CSRF-TOKEN': csrfToken
+            },
+            body: JSON.stringify({
+              department_id: deptId,
+              degree_level_id: levelId
+            })
+          });
+
+          const payload = await response.json();
+          if (!response.ok) {
+            throw new Error(payload.message || 'Could not generate confirmation code.');
+          }
+
+          $code.text(payload.code);
+          $('#delete-all-count').text(payload.course_count ?? 0);
+          $hint.text(`Code expires in ${payload.expires_in_minutes || 10} minutes.`);
+          $input.prop('disabled', false).trigger('focus');
+        } catch (error) {
+          $hint.text(error.message || 'Failed to generate code.');
+        }
+      });
+
+      $('#confirmation_code').on('input', function () {
+        const typed = String($(this).val() || '').trim().toUpperCase();
+        const expected = String($('#delete-all-code').text() || '').trim().toUpperCase();
+        const count = parseInt($('#delete-all-count').text() || '0', 10);
+        const valid = typed.length === 6 && typed === expected && count > 0;
+        $('#delete-all-submit').prop('disabled', !valid);
+      });
+
+      deleteAllModal.addEventListener('hidden.bs.modal', function () {
+        $('#confirmation_code').val('').prop('disabled', true);
+        $('#delete-all-submit').prop('disabled', true);
+        $('#delete-all-code').text('------');
+        $('#delete-all-code-hint').text('');
+      });
+    }
 
     const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
 

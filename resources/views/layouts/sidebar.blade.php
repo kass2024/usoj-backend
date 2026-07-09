@@ -286,10 +286,41 @@
                     </x-nav-link>
                 </li>
                 <li class="nav-item">
-                    <x-nav-link class="nav-link menu-link" :href="route('ai-transcript-studio.index')"
-                                :active="request()->routeIs('ai-transcript-studio.*')">
+                    <a class="nav-link menu-link {{ request()->routeIs('ai-transcript-studio.*') ? 'active' : '' }}"
+                       href="#aiTranscriptStudio" data-bs-toggle="collapse" role="button"
+                       aria-expanded="{{ request()->routeIs('ai-transcript-studio.*') ? 'true' : 'false' }}"
+                       aria-controls="aiTranscriptStudio">
                         <i class="ri-robot-2-line"></i> <span data-key="t-ai-studio">AI Transcript Studio</span>
-                    </x-nav-link>
+                    </a>
+                    <div class="menu-dropdown collapse {{ request()->routeIs('ai-transcript-studio.*') ? 'show' : '' }}"
+                         id="aiTranscriptStudio">
+                        <ul class="nav nav-sm flex-column">
+                            <li class="nav-item">
+                                <a href="{{ route('ai-transcript-studio.index') }}"
+                                   class="nav-link {{ request()->routeIs('ai-transcript-studio.index') ? 'active' : '' }}">
+                                    Generate Transcript
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="{{ route('ai-transcript-studio.assessments.index') }}"
+                                   class="nav-link {{ request()->routeIs('ai-transcript-studio.assessments.*') ? 'active' : '' }}">
+                                    AI assessments
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="{{ route('ai-transcript-studio.marking.index') }}"
+                                   class="nav-link {{ request()->routeIs('ai-transcript-studio.marking.*') ? 'active' : '' }}">
+                                    Marking &amp; results
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a href="{{ route('ai-transcript-studio.runs.index') }}"
+                                   class="nav-link {{ request()->routeIs('ai-transcript-studio.runs.*') || request()->routeIs('ai-transcript-studio.run.show') ? 'active' : '' }}">
+                                    Run history
+                                </a>
+                            </li>
+                        </ul>
+                    </div>
                 </li>
                 <li class="nav-item">
                     <x-nav-link class="nav-link menu-link" :href="route('document-links.index')"

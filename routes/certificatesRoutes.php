@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AiAssessmentManagementController;
 use App\Http\Controllers\AiTranscriptStudioController;
 use App\Http\Controllers\CertificatesController;
 use App\Http\Controllers\CoursesSchoolViewController;
@@ -45,6 +46,19 @@ Route::controller(AiTranscriptStudioController::class)
         Route::get('/students/{student}/transcript', 'generateTranscript')->name('transcript');
     });
 
+Route::controller(AiAssessmentManagementController::class)
+    ->middleware('auth')
+    ->prefix('ai-transcript-studio')
+    ->name('ai-transcript-studio.')
+    ->group(function () {
+        Route::get('/assessments', 'assessments')->name('assessments.index');
+        Route::get('/assessments/{type}/{id}', 'showAssessment')->name('assessments.show');
+        Route::get('/marking', 'marking')->name('marking.index');
+        Route::get('/marking/students/{student}', 'showStudentMarking')->name('marking.show');
+        Route::patch('/marking/submissions/{submission}', 'updateSubmissionMark')->name('marking.update');
+        Route::get('/runs-history', 'runs')->name('runs.index');
+    });
+
 // ---------------- DMI: manage private upload links (staff) ----------------
 Route::controller(DocumentUploadLinkController::class)
     ->middleware('auth')
@@ -85,6 +99,8 @@ Route::controller(CoursesSchoolViewController::class)
         Route::get('/departments/{department}/courses', 'coursesByDepartment')->name('courses.byDepartment');
         Route::post('/bulk-text-parse', [CourseController::class, 'parseBulkText'])->name('bulkTextParse');
         Route::post('/bulk-text-import', [CourseController::class, 'bulkTextImport'])->name('bulkTextImport');
+        Route::post('/bulk-delete/challenge', [CourseController::class, 'bulkDeleteChallenge'])->name('bulkDeleteChallenge');
+        Route::delete('/bulk-delete', [CourseController::class, 'bulkDeleteAll'])->name('bulkDeleteAll');
     });
 
 // ---------------- Students (cascade JSON + page) ----------------

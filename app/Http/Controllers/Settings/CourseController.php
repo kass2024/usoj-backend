@@ -8,6 +8,7 @@ use App\Models\Department;
 use App\Services\CourseForceDeleteService;
 use App\Services\CourseTextImportService;
 use App\Support\CourseDegreeLevelResolver;
+use App\Support\DestructiveActionConfirmation;
 use App\Support\ProgramDuration;
 use App\Support\Utf8Sanitizer;
 use Illuminate\Http\Request;
@@ -63,6 +64,76 @@ class CourseController extends Controller
             return back()->with('message', $forceDelete->summaryMessage($label, $counts));
         } catch (\Throwable $th) {
             return back()->with('error', 'Could not delete course: '.$th->getMessage());
+        }
+    }
+
+    public function bulkDeleteChallenge(Request $request)
+    {
+        $data = $request->validate([
+            'department_id' => 'required|exists:departments,id',
+            'degree_level_id' => 'required|exists:degree_levels,id',
+        ]);
+
+        $department = Department::query()->findOrFail($data['department_id']);
+        $degreeLevel = CourseDegreeLevelResolver::resolveForDepartment(
+            $department,
+            (int) $data['degree_level_id']
+        );
+
+        if (! $degreeLevel) {
+            return response()->json(['message' => 'Invalid degree level for this department.'], 422);
+        }
+
+        $courseCount = Course::query()
+            ->where('department_id', $department->id)
+            ->where('degree_level_id', $degreeLevel->id)
+            ->count();
+
+        $code = DestructiveActionConfirmation::issue('courses.bulk_delete', [
+            'department_id' => $department->id,
+            'degree_level_id' => $degreeLevel->id,
+        ]);
+
+        return response()->json([
+            'code' => $code,
+            'course_count' => $courseCount,
+            'scope_label' => $department->name.' · '.$degreeLevel->name,
+            'expires_in_minutes' => 10,
+        ]);
+    }
+
+    public function bulkDeleteAll(Request $request, CourseForceDeleteService $forceDelete)
+    {
+        $data = $request->validate([
+            'department_id' => 'required|exists:departments,id',
+            'degree_level_id' => 'required|exists:degree_levels,id',
+            'confirmation_code' => 'required|string|size:6',
+        ]);
+
+        if (! DestructiveActionConfirmation::validate('courses.bulk_delete', $data['confirmation_code'], [
+            'department_id' => $data['department_id'],
+            'degree_level_id' => $data['degree_level_id'],
+        ])) {
+            return back()->with('error', 'Invalid or expired confirmation code. Open the delete dialog again to get a new code.');
+        }
+
+        $department = Department::query()->findOrFail($data['department_id']);
+        $degreeLevel = CourseDegreeLevelResolver::resolveForDepartment(
+            $department,
+            (int) $data['degree_level_id']
+        );
+
+        if (! $degreeLevel) {
+            return back()->with('error', 'Invalid degree level for this department.');
+        }
+
+        try {
+            $counts = $forceDelete->deleteAllInScope($department->id, $degreeLevel->id);
+            $scopeLabel = $department->name.' · '.$degreeLevel->name;
+
+            return back()->with('message', $forceDelete->bulkSummaryMessage($scopeLabel, $counts));
+        } catch (\Throwable $th) {
+            return back()->with('error', 'Bulk delete failed: '.$th->getMessage());
         }
     }
 

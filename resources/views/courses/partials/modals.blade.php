@@ -152,3 +152,48 @@
     </form>
   </div>
 </div>
+
+{{-- Delete All Courses In Scope --}}
+<div class="modal fade" id="deleteAllCoursesModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <form class="modal-content" method="POST" action="{{ route('courses.bulkDeleteAll') }}" id="delete-all-form">
+      @csrf
+      @method('DELETE')
+      <input type="hidden" name="department_id" id="delete_all_department_id">
+      <input type="hidden" name="degree_level_id" id="delete_all_degree_level_id">
+
+      <div class="modal-header bg-danger-subtle">
+        <h5 class="modal-title text-danger">Delete all courses in scope</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-danger">
+          <strong>Permanent action.</strong> This removes <strong>every course</strong> for the selected department and degree level,
+          including linked modules, lessons, assignments, quizzes, exams, questions, and student marks.
+        </div>
+
+        <p class="mb-2">
+          <strong>Scope:</strong> <span id="delete-all-scope">—</span><br>
+          <strong>Courses to delete:</strong> <span id="delete-all-count" class="fw-semibold">0</span>
+        </p>
+
+        <div class="text-center my-3 p-3 border rounded bg-light">
+          <div class="small text-muted mb-1">Type this confirmation code to proceed</div>
+          <div id="delete-all-code" class="fs-3 fw-bold letter-spacing-2 text-danger user-select-all">------</div>
+          <div class="small text-muted mt-1" id="delete-all-code-hint">Generating code…</div>
+        </div>
+
+        <div class="mb-0">
+          <label class="form-label" for="confirmation_code">Confirmation code</label>
+          <input type="text" class="form-control text-uppercase text-center fs-5"
+                 name="confirmation_code" id="confirmation_code"
+                 maxlength="6" autocomplete="off" placeholder="Enter code" required disabled>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="submit" class="btn btn-danger" id="delete-all-submit" disabled>Delete all courses</button>
+      </div>
+    </form>
+  </div>
+</div>
