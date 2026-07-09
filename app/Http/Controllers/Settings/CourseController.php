@@ -129,6 +129,12 @@ class CourseController extends Controller
 
         try {
             $counts = $forceDelete->deleteAllInScope($department->id, $degreeLevel->id);
+
+            $department->refresh();
+            if (! $department->exists) {
+                return back()->with('error', 'Unexpected error: department record was affected. Contact support.');
+            }
+
             $scopeLabel = $department->name.' · '.$degreeLevel->name;
 
             return back()->with('message', $forceDelete->bulkSummaryMessage($scopeLabel, $counts));

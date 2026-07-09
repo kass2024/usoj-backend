@@ -168,8 +168,11 @@
       </div>
       <div class="modal-body">
         <div class="alert alert-danger">
-          <strong>Permanent action.</strong> This removes <strong>every course</strong> for the selected department and degree level,
-          including linked modules, lessons, assignments, quizzes, exams, questions, and student marks.
+          <strong>Permanent action.</strong> This removes <strong>only courses</strong> for the selected department and degree level,
+          plus their linked modules, lessons, assignments, quizzes, exams, questions, and student marks.
+        </div>
+        <div class="alert alert-info small mb-3">
+          <strong>School and department are not deleted.</strong> You can add new courses again after this action.
         </div>
 
         <p class="mb-2">

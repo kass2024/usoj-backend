@@ -25,9 +25,7 @@ class CoursesSchoolViewController extends Controller
         return response()->json(
             $program->schools()
                 ->active()
-                ->whereHas('departments.courses', function ($q) {
-                    $q->where('status', 'active');
-                })
+                ->whereHas('departments', fn ($q) => $q->active())
                 ->orderBy('name')
                 ->get(['id', 'name'])
         );
@@ -38,7 +36,6 @@ class CoursesSchoolViewController extends Controller
         return response()->json(
             $school->departments()
                 ->active()
-                ->withCourses(true)
                 ->orderBy('name')
                 ->get(['id', 'name'])
         );

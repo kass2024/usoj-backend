@@ -48,7 +48,7 @@ class CourseForceDeleteService
         }
 
         return sprintf(
-            'Deleted %d course(s) in %s with %d module(s), %d assignment(s), %d quiz(zes), %d exam(s), and %d lesson(s).',
+            'Deleted %d course(s) in %s with %d module(s), %d assignment(s), %d quiz(zes), %d exam(s), and %d lesson(s). School and department were kept.',
             $counts['courses'],
             $scopeLabel,
             $counts['modules'],
